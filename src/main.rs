@@ -2,17 +2,23 @@
 extern crate enum_display_derive;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate option_set;
+#[macro_use]
+extern crate bitflags;
 
 extern crate byteorder;
-extern crate csv;
+//extern crate csv;
 extern crate flate2;
+extern crate serde;
+extern crate serde_json;
 
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use flate2::read::MultiGzDecoder;
 
 const V1: [u8; 4] = *b"1SLD";
@@ -24,11 +30,37 @@ enum Version {
     V2,
 }
 
+option_set! {
+    struct RecordFlags: UpperCamel + u32 {
+        const FOLDER_EVENT           = 0x00000001;
+        const MOUNT                  = 0x00000002;
+        const UNMOUNT                = 0x00000004;
+        const END_OF_TRANSACTION     = 0x00000020;
+        const LAST_HARD_LINK_REMOVED = 0x00000800;
+        const HARD_LINK              = 0x00001000;
+        const SYMBOLIC_LINK          = 0x00004000;
+        const FILE_EVENT             = 0x00008000;
+        const PERMISSION_CHANGE      = 0x00010000;
+        const EXTENDED_ATTR_MODIFIED = 0x00020000;
+        const EXTENDED_ATTR_REMOVED  = 0x00040000;
+        const DOCUMENT_REVISIONING   = 0x00100000;
+        const ITEM_CLONED            = 0x00400000;
+        const CREATED                = 0x01000000;
+        const REMOVED                = 0x02000000;
+        const INODE_META_MOD         = 0x04000000;
+        const RENAMED                = 0x08000000;
+        const MODIFIED               = 0x10000000;
+        const EXCHANGE               = 0x20000000;
+        const FINDER_INFO_MOD        = 0x40000000;
+        const FOLDER_CREATED         = 0x80000000;
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct Record<'a> {
     path: Cow<'a, str>,
     event_id: u64,
-    flags: u32,
+    flags: RecordFlags,
     node_id: Option<u64>,
 }
 
@@ -45,10 +77,15 @@ impl<'a> Record<'a> {
             println!("End of pages discovered :: {}", rlen);
             Ok(None)
         } else {
+            let event_id = reader.read_u64::<BigEndian>()?;
+
+            let mut flags = RecordFlags::default();
+            flags.bits = reader.read_u32::<BigEndian>()?;
+
             Ok(Some(Record {
                 path: String::from_utf8_lossy(&sbuf[..rlen - 1]),
-                event_id: reader.read_u64::<LittleEndian>()?,
-                flags: reader.read_u32::<LittleEndian>()?,
+                event_id,
+                flags,
                 node_id: if is_v2 {
                     *read += rlen + 20;
                     Some(reader.read_u64::<LittleEndian>()?)
@@ -67,7 +104,8 @@ fn main() -> io::Result<()> {
     //    let mut gread = BufReader::new(File::open("/home/adam/t/fse")?);
 
     let mut header = [0u8; 4];
-    let mut c = csv::Writer::from_path("records.csv")?;
+    //    let mut c = csv::Writer::from_path("records.csv")?;
+    let j = File::create("records.json")?;
     let mut sbuf = Vec::with_capacity(1_000);
 
     loop {
@@ -107,7 +145,10 @@ fn main() -> io::Result<()> {
         let mut read = 12usize;
 
         while let Some(r) = Record::from_bytes(&mut gread, &mut sbuf, &mut read, is_v2)? {
-            c.serialize(r)?;
+            //            c.serialize(r)?;
+            serde_json::ser::to_writer(&j, &r)?;
+            writeln!(&j);
+
             if read == p_len {
                 println!("Wanted len");
                 break;
