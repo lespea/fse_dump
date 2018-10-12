@@ -1,5 +1,5 @@
 [package]
-name = "fsdump"
+name = "fse_dump"
 version = "0.1.0"
 authors = ["Adam Lesperance <lespea@gmail.com>"]
 edition = "2018"
