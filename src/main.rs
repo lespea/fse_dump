@@ -17,7 +17,7 @@ extern crate serde_json;
 extern crate simple_logger;
 
 use std::fs::File;
-use std::io::{self, prelude::*, BufReader};
+use std::io::{self, prelude::*, BufReader, BufWriter};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use flate2::read::MultiGzDecoder;
@@ -33,7 +33,7 @@ fn main() -> io::Result<()> {
     let mut reader = BufReader::new(MultiGzDecoder::new(fh));
 
     let mut c = csv::Writer::from_path("records.csv")?;
-    let j = File::create("records.json")?;
+    let mut j = BufWriter::new(File::create("records.json")?);
 
     let mut sbuf = Vec::with_capacity(1_000);
 
@@ -76,8 +76,8 @@ fn main() -> io::Result<()> {
                 }
             };
 
-            serde_json::ser::to_writer(&j, &rec)?;
-            writeln!(&j);
+            serde_json::ser::to_writer(&mut j, &rec)?;
+            writeln!(&mut j);
             c.serialize(&rec)?;
 
             if read >= p_len {
