@@ -125,6 +125,7 @@ fn main() -> io::Result<()> {
             for f in opts.files.into_iter() {
                 send.send(f);
             }
+            drop(send);
         })
     } else {
         let mut buf = Vec::with_capacity(5000);
