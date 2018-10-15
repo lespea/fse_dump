@@ -44,28 +44,24 @@ fn main() -> io::Result<()> {
     let do_parallel = opts.parallel && opts.files.len() > 1;
 
     let mut global_csv = if let Some(ref p) = opts.csv {
-        if do_parallel {
-            Some(file_parser::CsvRecordWriter::Threaded(Arc::new(
-                Mutex::new(csv::Writer::from_path(p)?),
+        if !do_parallel {
+            Some(file_parser::CsvRecordWriter::Simple(Box::new(
+                csv::Writer::from_path(p)?,
             )))
         } else {
-            Some(file_parser::CsvRecordWriter::Simple(
-                Box::new(csv::Writer::from_path(p)?),
-            ))
+            None
         }
     } else {
         None
     };
 
     let mut global_json = if let Some(ref p) = opts.json {
-        if do_parallel {
-            Some(file_parser::JsonRecordWriter::Threaded(Arc::new(
-                Mutex::new(io::BufWriter::new(File::create(p)?)),
-            )))
-        } else {
+        if !do_parallel {
             Some(file_parser::JsonRecordWriter::Simple(io::BufWriter::new(
                 File::create(p)?,
             )))
+        } else {
+            None
         }
     } else {
         None
@@ -79,14 +75,29 @@ fn main() -> io::Result<()> {
         let single_csv = opts.csvs;
         let single_json = opts.jsons;
 
+        let csv_arc = if let Some(ref p) = opts.csv {
+            Some(Arc::new(Mutex::new(csv::Writer::from_path(p)?)))
+        } else {
+            None
+        };
+
+        let json_arc = if let Some(ref p) = opts.json {
+            Some(Arc::new(Mutex::new(io::BufWriter::new(File::create(p)?))))
+        } else {
+            None
+        };
+
         crossbeam::scope(|scope| {
             for _ in 0..num_cpus::get() {
                 let recv = recv.clone();
 
+                let mut global_csv = csv_arc.clone().map(file_parser::CsvRecordWriter::Threaded);
+                let mut global_json = json_arc
+                    .clone()
+                    .map(file_parser::JsonRecordWriter::Threaded);
+
                 scope.spawn(move || {
                     let mut buf = Vec::with_capacity(5000);
-                    let mut cn = None;
-                    let mut jn = None;
 
                     for f in recv {
                         let path = f.to_string_lossy().to_string();
@@ -95,8 +106,8 @@ fn main() -> io::Result<()> {
                             &mut buf,
                             single_csv,
                             single_json,
-                            &mut cn,
-                            &mut jn,
+                            &mut global_csv,
+                            &mut global_json,
                         );
 
                         match parser {
