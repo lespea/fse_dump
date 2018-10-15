@@ -54,12 +54,12 @@ impl<'a> ParseOpts<'a> {
             let ext = in_file.extension().and_then(|e| e.to_str());
 
             if single_csv {
-                let ext = ext.map_or_else(|| ".csv".to_string(), |e| format!("{}.csv", e));
+                let ext = ext.map_or_else(|| "csv".to_string(), |e| format!("{}.csv", e));
                 csv_out = Some(csv::Writer::from_path(in_file.with_extension(ext))?);
             }
 
             if single_json {
-                let ext = ext.map_or_else(|| ".csv".to_string(), |e| format!("{}.csv", e));
+                let ext = ext.map_or_else(|| "csv".to_string(), |e| format!("{}.csv", e));
                 json_out = Some(BufWriter::new(File::create(in_file.with_extension(ext))?));
             }
         }
