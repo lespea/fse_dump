@@ -4,6 +4,8 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate structopt;
 
 #[cfg(test)]
 extern crate env_logger;
@@ -17,17 +19,26 @@ extern crate serde_json;
 extern crate simple_logger;
 
 use std::fs::File;
-use std::io::{self, prelude::*, BufReader, BufWriter};
+use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use flate2::read::MultiGzDecoder;
 
 mod flags;
+mod opts;
 mod record;
 mod version;
 
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
+
+    let opts = opts::get_opts();
+    if !(opts.csvs || opts.jsons || opts.csv.is_some() || opts.json.is_some()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "You must specify at least one output type!",
+        ));
+    }
 
     let fh = File::open("/home/adam/t/0000000001df1b9b")?;
     let mut reader = BufReader::new(MultiGzDecoder::new(fh));
@@ -41,7 +52,7 @@ fn main() -> io::Result<()> {
         debug!("starting loop");
         let v = match version::Version::from_reader(&mut reader) {
             Err(e) => {
-                if e.kind() == io::ErrorKind::UnexpectedEof {
+                if e.kind() == ErrorKind::UnexpectedEof {
                     debug!("eof");
                     break;
                 } else {

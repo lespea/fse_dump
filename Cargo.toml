@@ -1,5 +1,6 @@
 [package]
 name = "fse_dump"
+description = "dump the fs events files on macs"
 version = "0.1.0"
 authors = ["Adam Lesperance <lespea@gmail.com>"]
 #edition = "2018"
@@ -7,6 +8,7 @@ authors = ["Adam Lesperance <lespea@gmail.com>"]
 [dependencies]
 bitflags = "1"
 byteorder = "1"
+clap = "2"
 csv = "1"
 enum-display-derive = "0.1"
 flate2 = "1"
@@ -17,10 +19,12 @@ serde = { version = "1", features = ["rc"] }
 serde_derive = "1"
 serde_json = "1"
 simple_logger = "1"
+structopt = "0"
 
 [dev-dependencies]
 env_logger = "0"
 
 [profile.release]
-lto = true
 codegen-units = 1
+lto = true
+panic = "abort"
