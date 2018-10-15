@@ -14,9 +14,7 @@ extern crate serde_derive;
 //extern crate serde;
 //extern crate serde_json;
 
-//use std::borrow::Cow;
 use std::fs::File;
-//use std::io;
 use std::io::{self, prelude::*, BufReader};
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -27,11 +25,10 @@ mod record;
 mod version;
 
 fn main() -> io::Result<()> {
-    simple_logger::init_with_level(log::Level::Debug).expect("Couldn't init logger");
+    simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
 
     let fh = File::open("/home/adam/t/0000000001df1b9b")?;
-    let mut gread = BufReader::new(MultiGzDecoder::new(fh));
-    //    let mut gread = BufReader::new(File::open("/home/adam/t/fse")?);
+    let mut reader = BufReader::new(MultiGzDecoder::new(fh));
 
     let mut c = csv::Writer::from_path("records.csv")?;
     let j = File::create("records.json")?;
@@ -40,7 +37,7 @@ fn main() -> io::Result<()> {
 
     loop {
         debug!("starting loop");
-        let v = match version::Version::from_reader(&mut gread) {
+        let v = match version::Version::from_reader(&mut reader) {
             Err(e) => {
                 if e.kind() == io::ErrorKind::UnexpectedEof {
                     debug!("eof");
@@ -60,15 +57,15 @@ fn main() -> io::Result<()> {
             }
         };
 
-        gread.read_exact(&mut [0u8; 4])?;
-        let p_len = gread.read_u32::<LittleEndian>()? as usize;
+        reader.read_exact(&mut [0u8; 4])?;
+        let p_len = reader.read_u32::<LittleEndian>()? as usize;
 
         info!("{:?} :: {}", v, p_len);
 
         let mut read = 12usize;
 
         loop {
-            let rec = match v.parse_record(&mut gread, &mut sbuf)? {
+            let rec = match v.parse_record(&mut reader, &mut sbuf)? {
                 None => break,
                 Some((s, rec)) => {
                     info!("Read {} bits", s);
