@@ -69,20 +69,26 @@ fn bits_to_str(bits: u32) -> String {
 }
 
 /// Given the bits, return a string representing the flags that are set
-pub fn parse_bits<'a>(bits: u32) -> Arc<String> {
-    {
+pub fn parse_bits(bits: u32) -> Arc<String> {
+    debug!(target:"flags", "Translating the bits {}", bits);
+    let ans = {
         FLAG_MAP
             .read()
             .expect("Couldn't lock the lookup map?")
             .get(&bits)
-            .map(|a| a.clone())
-    }
-    .unwrap_or_else(|| {
+            .cloned()
+    };
+
+    ans.unwrap_or_else(|| {
+        debug!(target:"flags", "Trying lock");
         FLAG_MAP
             .write()
             .expect("Couldn't lock the lookup map?")
             .entry(bits)
-            .or_insert_with(|| Arc::new(bits_to_str(bits)))
+            .or_insert_with(|| {
+                debug!("Making new flag entry");
+                Arc::new(bits_to_str(bits))
+            })
             .clone()
     })
 }
