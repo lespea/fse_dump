@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 pub enum CsvRecordWriter {
-    Simple(csv::Writer<File>),
+    Simple(Box<csv::Writer<File>>),
     Threaded(Arc<Mutex<csv::Writer<File>>>),
 }
 

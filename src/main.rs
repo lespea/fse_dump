@@ -11,9 +11,11 @@ extern crate structopt;
 extern crate env_logger;
 
 extern crate byteorder;
+extern crate crossbeam;
 extern crate csv;
 extern crate flate2;
 extern crate fnv;
+extern crate num_cpus;
 extern crate serde;
 extern crate serde_json;
 extern crate simple_logger;
@@ -39,22 +41,24 @@ fn main() -> io::Result<()> {
         ));
     }
 
-    let mut global_csv = if let Some(p) = opts.csv {
-        if opts.parallel && opts.files.len() > 1 {
+    let do_parallel = opts.parallel && opts.files.len() > 1;
+
+    let mut global_csv = if let Some(ref p) = opts.csv {
+        if do_parallel {
             Some(file_parser::CsvRecordWriter::Threaded(Arc::new(
                 Mutex::new(csv::Writer::from_path(p)?),
             )))
         } else {
             Some(file_parser::CsvRecordWriter::Simple(
-                csv::Writer::from_path(p)?,
+                Box::new(csv::Writer::from_path(p)?),
             ))
         }
     } else {
         None
     };
 
-    let mut global_json = if let Some(p) = opts.json {
-        if opts.parallel && opts.files.len() > 1 {
+    let mut global_json = if let Some(ref p) = opts.json {
+        if do_parallel {
             Some(file_parser::JsonRecordWriter::Threaded(Arc::new(
                 Mutex::new(io::BufWriter::new(File::create(p)?)),
             )))
@@ -67,22 +71,69 @@ fn main() -> io::Result<()> {
         None
     };
 
-    let mut buf = Vec::with_capacity(5000);
-    for f in opts.files.into_iter() {
-        let p = f.to_string_lossy().to_string();
-        match file_parser::ParseOpts::for_path(
-            f,
-            &mut buf,
-            opts.csvs.clone(),
-            opts.jsons.clone(),
-            &mut global_csv,
-            &mut global_json,
-        )?
-        .parse_file()
-        {
-            Ok(_) => info!("Finished parsing {}", p),
-            Err(e) => error!("Couldn't parse '{}': {}", p, e),
-        };
+    if do_parallel {
+        use crossbeam::channel;
+
+        let (send, recv) = channel::bounded::<std::path::PathBuf>(100);
+
+        let single_csv = opts.csvs;
+        let single_json = opts.jsons;
+
+        crossbeam::scope(|scope| {
+            for _ in 0..num_cpus::get() {
+                let recv = recv.clone();
+
+                scope.spawn(move || {
+                    let mut buf = Vec::with_capacity(5000);
+                    let mut cn = None;
+                    let mut jn = None;
+
+                    for f in recv {
+                        let path = f.to_string_lossy().to_string();
+                        let parser = file_parser::ParseOpts::for_path(
+                            f,
+                            &mut buf,
+                            single_csv,
+                            single_json,
+                            &mut cn,
+                            &mut jn,
+                        );
+
+                        match parser {
+                            Ok(mut p) => match p.parse_file() {
+                                Ok(_) => info!("Finished parsing {:?}", path),
+                                Err(e) => error!("Couldn't parse '{:?}': {}", path, e),
+                            },
+
+                            Err(e) => error!("Couldn't construct a parser for '{:?}': {}", path, e),
+                        }
+                    }
+                });
+            }
+
+            for f in opts.files.into_iter() {
+                send.send(f);
+            }
+        })
+    } else {
+        let mut buf = Vec::with_capacity(5000);
+        for f in opts.files.into_iter() {
+            let p = f.to_string_lossy().to_string();
+            let result = file_parser::ParseOpts::for_path(
+                f,
+                &mut buf,
+                opts.csvs,
+                opts.jsons,
+                &mut global_csv,
+                &mut global_json,
+            )?
+            .parse_file();
+
+            match result {
+                Ok(_) => info!("Finished parsing {}", p),
+                Err(e) => error!("Couldn't parse '{}': {}", p, e),
+            };
+        }
     }
 
     Ok(())
