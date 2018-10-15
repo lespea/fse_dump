@@ -2,7 +2,8 @@ extern crate byteorder;
 extern crate serde;
 extern crate serde_json;
 
-use crate::{flags, record::Record};
+use flags;
+use record::Record;
 
 use std::io::{self, prelude::*};
 

@@ -1,5 +1,3 @@
-#![feature(nll)]
-
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -7,12 +5,16 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-//extern crate byteorder;
-//extern crate csv;
-//extern crate flate2;
-//extern crate fnv;
-//extern crate serde;
-//extern crate serde_json;
+#[cfg(test)]
+extern crate env_logger;
+
+extern crate byteorder;
+extern crate csv;
+extern crate flate2;
+extern crate fnv;
+extern crate serde;
+extern crate serde_json;
+extern crate simple_logger;
 
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
@@ -68,7 +70,7 @@ fn main() -> io::Result<()> {
             let rec = match v.parse_record(&mut reader, &mut sbuf)? {
                 None => break,
                 Some((s, rec)) => {
-                    info!("Read {} bits", s);
+                    debug!("Read {} bits", s);
                     read += s;
                     rec
                 }

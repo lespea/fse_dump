@@ -101,6 +101,8 @@ pub fn parse_bits(bits: u32) -> Arc<String> {
 mod tests {
     use super::*;
 
+    use env_logger;
+
     #[test]
     fn simple_bits_to_strs() {
         let _ = env_logger::init();
