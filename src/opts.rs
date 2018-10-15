@@ -37,7 +37,7 @@ pub struct Opts {
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
     /// that has a filename consisting solely of hex chars will be considered a file to parse
-    #[structopt(parse(from_os_str), raw(required = "true", min_values = "2"))]
+    #[structopt(parse(from_os_str), raw(required = "true", min_values = "1"))]
     pub files: Vec<PathBuf>,
 }
 

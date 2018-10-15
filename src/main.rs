@@ -18,16 +18,15 @@ extern crate serde;
 extern crate serde_json;
 extern crate simple_logger;
 
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind};
-
-use byteorder::{LittleEndian, ReadBytesExt};
-use flate2::read::MultiGzDecoder;
-
+mod file_parser;
 mod flags;
 mod opts;
 mod record;
 mod version;
+
+use std::fs::File;
+use std::io;
+use std::sync::{Arc, Mutex};
 
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
@@ -40,69 +39,50 @@ fn main() -> io::Result<()> {
         ));
     }
 
-    let fh = File::open("/home/adam/t/0000000001df1b9b")?;
-    let mut reader = BufReader::new(MultiGzDecoder::new(fh));
-
-    let mut c = csv::Writer::from_path("records.csv")?;
-    let mut j = BufWriter::new(File::create("records.json")?);
-
-    let mut sbuf = Vec::with_capacity(1_000);
-
-    loop {
-        debug!("starting loop");
-        let v = match version::Version::from_reader(&mut reader) {
-            Err(e) => {
-                if e.kind() == ErrorKind::UnexpectedEof {
-                    debug!("eof");
-                    break;
-                } else {
-                    return Err(e);
-                }
-            }
-
-            Ok(Some(v)) => v,
-
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Unsupported type",
-                ))
-            }
-        };
-
-        reader.read_exact(&mut [0u8; 4])?;
-        let p_len = reader.read_u32::<LittleEndian>()? as usize;
-
-        info!("{:?} :: {}", v, p_len);
-
-        let mut read = 12usize;
-
-        loop {
-            let rec = match v.parse_record(&mut reader, &mut sbuf)? {
-                None => break,
-                Some((s, rec)) => {
-                    debug!("Read {} bits", s);
-                    read += s;
-                    rec
-                }
-            };
-
-            serde_json::ser::to_writer(&mut j, &rec)?;
-            writeln!(&mut j);
-            c.serialize(&rec)?;
-
-            if read >= p_len {
-                if read == p_len {
-                    debug!("Wanted len");
-                    break;
-                } else {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Length of page records didn't match expected length",
-                    ));
-                }
-            }
+    let mut global_csv = if let Some(p) = opts.csv {
+        if opts.parallel && opts.files.len() > 1 {
+            Some(file_parser::CsvRecordWriter::Threaded(Arc::new(
+                Mutex::new(csv::Writer::from_path(p)?),
+            )))
+        } else {
+            Some(file_parser::CsvRecordWriter::Simple(
+                csv::Writer::from_path(p)?,
+            ))
         }
+    } else {
+        None
+    };
+
+    let mut global_json = if let Some(p) = opts.json {
+        if opts.parallel && opts.files.len() > 1 {
+            Some(file_parser::JsonRecordWriter::Threaded(Arc::new(
+                Mutex::new(io::BufWriter::new(File::create(p)?)),
+            )))
+        } else {
+            Some(file_parser::JsonRecordWriter::Simple(io::BufWriter::new(
+                File::create(p)?,
+            )))
+        }
+    } else {
+        None
+    };
+
+    let mut buf = Vec::with_capacity(5000);
+    for f in opts.files.into_iter() {
+        let p = f.to_string_lossy().to_string();
+        match file_parser::ParseOpts::for_path(
+            f,
+            &mut buf,
+            opts.csvs.clone(),
+            opts.jsons.clone(),
+            &mut global_csv,
+            &mut global_json,
+        )?
+        .parse_file()
+        {
+            Ok(_) => info!("Finished parsing {}", p),
+            Err(e) => error!("Couldn't parse '{}': {}", p, e),
+        };
     }
 
     Ok(())

@@ -1,13 +1,9 @@
-extern crate byteorder;
-extern crate serde;
-extern crate serde_json;
-
 use flags;
 use record::Record;
 
-use std::io::{self, prelude::*};
-
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+
+use std::io::{self, prelude::*};
 
 const V1_BYTES: &[u8; 4] = b"1SLD";
 const V2_BYTES: &[u8; 4] = b"2SLD";

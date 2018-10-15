@@ -1,6 +1,3 @@
-extern crate serde;
-extern crate serde_json;
-
 use std::borrow::Cow;
 use std::sync::Arc;
 
