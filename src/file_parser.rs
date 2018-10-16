@@ -94,7 +94,7 @@ impl<'a> ParseOpts<'a> {
             self.reader.read_exact(&mut [0u8; 4])?;
             let p_len = self.reader.read_u32::<LittleEndian>()? as usize;
 
-            info!("{:?} :: {}", v, p_len);
+            debug!("{:?} :: {}", v, p_len);
 
             let mut read = 12usize;
 
