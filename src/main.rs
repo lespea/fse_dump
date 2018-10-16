@@ -26,7 +26,12 @@ mod opts;
 mod record;
 mod version;
 
-use std::io;
+use crossbeam::channel;
+
+use std::{
+    fs::File,
+    io::{self, BufWriter},
+};
 
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
@@ -41,29 +46,72 @@ fn main() -> io::Result<()> {
 
     let do_parallel = opts.parallel && opts.files.len() > 1;
 
-    if do_parallel {
-        use crossbeam::channel;
+    let c_writer = if let Some(ref p) = opts.csv {
+        Some(csv::Writer::from_path(p)?)
+    } else {
+        None
+    };
 
-        let (send, recv) = channel::bounded::<std::path::PathBuf>(100);
+    let j_writer = if let Some(ref p) = opts.json {
+        Some(BufWriter::new(File::create(p)?))
+    } else {
+        None
+    };
 
-        let single_csv = opts.csvs;
-        let single_json = opts.jsons;
+    crossbeam::scope(move |scope| {
+        let rec_send = if c_writer.is_some() || j_writer.is_some() {
+            let (send, recv) = channel::bounded::<record::Record>(5000);
 
-        crossbeam::scope(|scope| {
+            scope.spawn(move || match (c_writer, j_writer) {
+                (Some(mut c), Some(mut j)) => {
+                    for r in recv {
+                        c.serialize(&r).expect("Error writing to the csv");
+                        serde_json::ser::to_writer(&mut j, &r).expect("Error writing the json");
+                    }
+                }
+
+                (Some(mut c), None) => {
+                    for r in recv {
+                        c.serialize(&r).expect("Error writing to the csv");
+                    }
+                }
+
+                (None, Some(mut j)) => {
+                    for r in recv {
+                        serde_json::ser::to_writer(&mut j, &r).expect("Error writing the json");
+                    }
+                }
+
+                _ => (),
+            });
+
+            Some(send)
+        } else {
+            None
+        };
+
+        if do_parallel {
+            let (path_send, path_recv) = channel::bounded::<std::path::PathBuf>(100);
+
+            let single_csv = opts.csvs;
+            let single_json = opts.jsons;
+
             for _ in 0..num_cpus::get() {
-                let recv = recv.clone();
+                let recv = path_recv.clone();
+                let rec_send = rec_send.clone();
 
                 scope.spawn(move || {
                     let mut buf = Vec::with_capacity(5000);
 
                     for f in recv {
                         let path = f.to_string_lossy().to_string();
+
                         let parser = file_parser::ParseOpts::for_path(
                             f,
                             &mut buf,
                             single_csv,
                             single_json,
-                            None,
+                            rec_send.clone(),
                         );
 
                         match parser {
@@ -79,24 +127,36 @@ fn main() -> io::Result<()> {
             }
 
             for f in opts.files.into_iter() {
-                send.send(f);
+                path_send.send(f);
             }
-            drop(send);
-        })
-    } else {
-        let mut buf = Vec::with_capacity(5000);
-        for f in opts.files.into_iter() {
-            let p = f.to_string_lossy().to_string();
-            let result =
-                file_parser::ParseOpts::for_path(f, &mut buf, opts.csvs, opts.jsons, None)?
-                    .parse_file();
+            drop(path_send);
+        } else {
+            let mut buf = Vec::with_capacity(5000);
+            for f in opts.files.into_iter() {
+                let path = f.to_string_lossy().to_string();
+                let parser = file_parser::ParseOpts::for_path(
+                    f,
+                    &mut buf,
+                    opts.csvs,
+                    opts.jsons,
+                    rec_send.clone(),
+                );
 
-            match result {
-                Ok(_) => info!("Finished parsing {}", p),
-                Err(e) => error!("Couldn't parse '{}': {}", p, e),
-            };
+                match parser {
+                    Ok(mut p) => match p.parse_file() {
+                        Ok(_) => info!("Finished parsing {}", path),
+                        Err(e) => error!("Couldn't parse '{}': {}", path, e),
+                    },
+
+                    Err(e) => error!("Couldn't construct a parser for '{:?}': {}", path, e),
+                };
+            }
         }
-    }
+
+        if let Some(r) = rec_send {
+            drop(r)
+        }
+    });
 
     Ok(())
 }
