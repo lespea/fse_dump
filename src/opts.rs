@@ -100,20 +100,6 @@ impl Opts {
                 .follow_links(true)
                 .sort_by(|a, b| a.file_name().cmp(b.file_name()))
                 .into_iter()
-//                .filter_entry(|e| {
-//                    info!("Checking the file {:?}", e.path());
-//                    e.metadata().map_or_else(|_| false, |m| m.is_file()) && e
-//                        .file_name()
-//                        .to_string_lossy()
-//                        .chars()
-//                        .all(|c| match c {
-//                            'a'..='f' | 'A'..='F' | '0'..='9' => true,
-//                            _ => {
-//                                info!("skipping due to {}", c);
-//                                false
-//                            }
-//                        })
-//                })
                 .filter_map(|e| match e {
                     Ok(e) =>
                     if let Ok(m) = e.metadata() {

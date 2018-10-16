@@ -18,12 +18,9 @@ num_cpus = "1"
 serde = { version = "1", features = ["rc"] }
 serde_derive = "1"
 serde_json = "1"
-simple_logger = "1"
+env_logger = "0"
 structopt = "0"
 walkdir = "2"
-
-[dev-dependencies]
-env_logger = "0"
 
 [profile.release]
 codegen-units = 1

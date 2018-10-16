@@ -1,5 +1,3 @@
-#![feature(result_map_or_else)]
-
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -9,18 +7,15 @@ extern crate serde_derive;
 #[macro_use]
 extern crate structopt;
 
-#[cfg(test)]
-extern crate env_logger;
-
 extern crate byteorder;
 extern crate crossbeam;
 extern crate csv;
+extern crate env_logger;
 extern crate flate2;
 extern crate fnv;
 extern crate num_cpus;
 extern crate serde;
 extern crate serde_json;
-extern crate simple_logger;
 extern crate walkdir;
 
 mod file_parser;
@@ -31,7 +26,9 @@ mod uniques;
 mod version;
 
 use crossbeam::channel;
+use env_logger::{Target, WriteStyle};
 
+use log::LevelFilter;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -39,7 +36,11 @@ use std::{
 };
 
 fn main() -> io::Result<()> {
-    simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
+    env_logger::Builder::new()
+        .filter(None, LevelFilter::Info)
+        .write_style(WriteStyle::Always)
+        .target(Target::Stderr)
+        .init();
 
     let opts = opts::get_opts()?;
     let do_parallel = opts.parallel && opts.files.len() > 1;
