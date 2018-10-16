@@ -26,7 +26,5 @@ walkdir = "2"
 env_logger = "0"
 
 [profile.release]
-#codegen-units = 1
-codegen-units = 32
-lto = false
-opt-level = 1
+codegen-units = 1
+lto = true
