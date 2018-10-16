@@ -1,6 +1,8 @@
+use structopt::StructOpt;
+use walkdir;
+
 use io::{self, ErrorKind};
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt()]
@@ -89,6 +91,54 @@ impl Opts {
         }
 
         Ok(())
+    }
+
+    pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
+        self.files.iter().flat_map(|path| {
+            walkdir::WalkDir::new(path)
+                .max_depth(1)
+                .follow_links(true)
+                .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+                .into_iter()
+//                .filter_entry(|e| {
+//                    info!("Checking the file {:?}", e.path());
+//                    e.metadata().map_or_else(|_| false, |m| m.is_file()) && e
+//                        .file_name()
+//                        .to_string_lossy()
+//                        .chars()
+//                        .all(|c| match c {
+//                            'a'..='f' | 'A'..='F' | '0'..='9' => true,
+//                            _ => {
+//                                info!("skipping due to {}", c);
+//                                false
+//                            }
+//                        })
+//                })
+                .filter_map(|e| match e {
+                    Ok(e) =>
+                    if let Ok(m) = e.metadata() {
+                         if !m.is_dir() && e.file_name()
+                                .to_string_lossy()
+                                .chars()
+                                .all(|c| match c {
+                                    'a'..='f' | 'A'..='F' | '0'..='9' => true,
+                                    _ => false,
+                                }) {
+                             info!("Found the fs events file {:?}", e.path());
+                                Some(e.into_path())
+                            } else {
+                                None
+                            }
+                    } else {
+                        None
+                    },
+
+                    Err(err) => {
+                        error!("Error iterating the files: {}", err);
+                        None
+                    }
+                })
+        })
     }
 }
 

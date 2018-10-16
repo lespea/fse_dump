@@ -1,9 +1,9 @@
 use record;
 use version;
 
-use csv;
 use byteorder::{LittleEndian, ReadBytesExt};
 use crossbeam::channel::Sender;
+use csv;
 use flate2::read::MultiGzDecoder;
 use serde_json;
 

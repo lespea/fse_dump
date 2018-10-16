@@ -1,3 +1,5 @@
+#![feature(result_map_or_else)]
+
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -19,6 +21,7 @@ extern crate num_cpus;
 extern crate serde;
 extern crate serde_json;
 extern crate simple_logger;
+extern crate walkdir;
 
 mod file_parser;
 mod flags;
@@ -45,9 +48,9 @@ fn main() -> io::Result<()> {
         let rec_send = if opts.csv.is_some() || opts.json.is_some() || opts.uniques.is_some() {
             let (send, recv) = channel::bounded::<record::Record>(5000);
 
-            let csv_path = opts.csv;
-            let json_path = opts.json;
-            let uniq_path = opts.uniques;
+            let csv_path = opts.csv.clone();
+            let json_path = opts.json.clone();
+            let uniq_path = opts.uniques.clone();
 
             scope.spawn(move || {
                 let stdout = io::stdout();
@@ -159,13 +162,13 @@ fn main() -> io::Result<()> {
                 });
             }
 
-            for f in opts.files.into_iter() {
+            for f in opts.real_files() {
                 path_send.send(f);
             }
             drop(path_send);
         } else {
             let mut buf = Vec::with_capacity(5000);
-            for f in opts.files.into_iter() {
+            for f in opts.real_files() {
                 let path = f.to_string_lossy().to_string();
                 let parser = file_parser::ParseOpts::for_path(
                     f,

@@ -20,11 +20,13 @@ serde_derive = "1"
 serde_json = "1"
 simple_logger = "1"
 structopt = "0"
+walkdir = "2"
 
 [dev-dependencies]
 env_logger = "0"
 
 [profile.release]
-codegen-units = 1
-lto = true
-panic = "abort"
+#codegen-units = 1
+codegen-units = 32
+lto = false
+opt-level = 1
