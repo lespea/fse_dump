@@ -1,9 +1,11 @@
 use record;
 use version;
 
+use csv;
 use byteorder::{LittleEndian, ReadBytesExt};
 use crossbeam::channel::Sender;
 use flate2::read::MultiGzDecoder;
+use serde_json;
 
 use std::{
     fs::File,
@@ -34,8 +36,8 @@ impl<'a> ParseOpts<'a> {
 
         if single_csv || single_json {
             if in_file.file_name().is_none() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
                     format!("The input file doesn't have a filename? '{:?}'", in_file),
                 ));
             }
@@ -82,8 +84,8 @@ impl<'a> ParseOpts<'a> {
                 Ok(Some(v)) => v,
 
                 _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
                         "Unsupported type",
                     ))
                 }
@@ -124,8 +126,8 @@ impl<'a> ParseOpts<'a> {
                         debug!("Wanted len");
                         break;
                     } else {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
                             "Length of page records didn't match expected length",
                         ));
                     }
