@@ -39,7 +39,8 @@ trait RecordParser {
             debug!("Found path {}", path);
             let event_id = reader.read_u64::<BigEndian>()?;
             debug!("Found event id {}", event_id);
-            let flags = flags::parse_bits(reader.read_u32::<BigEndian>()?);
+            let flag = reader.read_u32::<BigEndian>()?;
+            let flags = flags::parse_bits(flag);
             debug!("Found flags {}", flags);
 
             if Self::HAS_NODEID {
@@ -51,6 +52,7 @@ trait RecordParser {
                     Record {
                         path,
                         event_id,
+                        flag,
                         flags,
                         node_id,
                     },
@@ -62,6 +64,7 @@ trait RecordParser {
                     Record {
                         path,
                         event_id,
+                        flag,
                         flags,
                         node_id: None,
                     },

@@ -30,6 +30,12 @@ pub struct Opts {
     #[structopt(short = "j", long = "json", parse(from_os_str))]
     pub json: Option<PathBuf>,
 
+    /// If we should dump the unique paths/operations found into a csv
+    ///
+    /// We'll combine all of the operations for each path so there is one entry per path
+    #[structopt(short = "u", long = "unique", parse(from_os_str))]
+    pub uniques: Option<PathBuf>,
+
     /// If we should process things in parallel.  If outputting to a csv/json file no order is
     /// guaranteed.
     #[structopt(short = "p", long = "parallel")]

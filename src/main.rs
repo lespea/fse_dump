@@ -24,11 +24,13 @@ mod file_parser;
 mod flags;
 mod opts;
 mod record;
+mod uniques;
 mod version;
 
 use crossbeam::channel;
 
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{self, BufWriter},
 };
@@ -46,13 +48,19 @@ fn main() -> io::Result<()> {
 
     let do_parallel = opts.parallel && opts.files.len() > 1;
 
-    let c_writer = if let Some(ref p) = opts.csv {
+    let mut c_writer = if let Some(ref p) = opts.csv {
         Some(csv::Writer::from_path(p)?)
     } else {
         None
     };
 
-    let j_writer = if let Some(ref p) = opts.json {
+    let u_writer = if let Some(ref p) = opts.uniques {
+        Some(csv::Writer::from_path(p)?)
+    } else {
+        None
+    };
+
+    let mut j_writer = if let Some(ref p) = opts.json {
         Some(BufWriter::new(File::create(p)?))
     } else {
         None
@@ -62,27 +70,35 @@ fn main() -> io::Result<()> {
         let rec_send = if c_writer.is_some() || j_writer.is_some() {
             let (send, recv) = channel::bounded::<record::Record>(5000);
 
-            scope.spawn(move || match (c_writer, j_writer) {
-                (Some(mut c), Some(mut j)) => {
-                    for r in recv {
+            scope.spawn(move || {
+                let want_uniques = u_writer.is_some();
+                let mut uniques = BTreeMap::new();
+
+                for r in recv {
+                    if let Some(ref mut c) = c_writer {
                         c.serialize(&r).expect("Error writing to the csv");
-                        serde_json::ser::to_writer(&mut j, &r).expect("Error writing the json");
+                    };
+
+                    if let Some(ref mut j) = j_writer {
+                        serde_json::ser::to_writer(j, &r).expect("Error writing the json");
+                    };
+
+                    if want_uniques {
+                        uniques
+                            .entry(r.path)
+                            .or_insert_with(uniques::UniqueCounts::default)
+                            .update(r.flag)
                     }
                 }
 
-                (Some(mut c), None) => {
-                    for r in recv {
-                        c.serialize(&r).expect("Error writing to the csv");
+                if !uniques.is_empty() {
+                    if let Some(mut c) = u_writer {
+                        for (path, entry) in uniques {
+                            c.serialize(entry.into_unique_out(path))
+                                .expect("Error writing the uniques");
+                        }
                     }
                 }
-
-                (None, Some(mut j)) => {
-                    for r in recv {
-                        serde_json::ser::to_writer(&mut j, &r).expect("Error writing the json");
-                    }
-                }
-
-                _ => (),
             });
 
             Some(send)
