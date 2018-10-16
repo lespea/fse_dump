@@ -26,9 +26,11 @@ mod opts;
 mod record;
 mod version;
 
-use std::fs::File;
-use std::io;
-use std::sync::{Arc, Mutex};
+use std::{
+    fs::File,
+    io,
+    sync::{Arc, Mutex},
+};
 
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");

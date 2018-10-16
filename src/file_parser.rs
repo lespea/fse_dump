@@ -4,11 +4,13 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use csv;
 use flate2::read::MultiGzDecoder;
 
-use std::borrow::BorrowMut;
-use std::fs::File;
-use std::io::{self, prelude::*, BufReader, BufWriter, ErrorKind};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::{
+    borrow::BorrowMut,
+    fs::File,
+    io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 pub enum CsvRecordWriter {
     Simple(Box<csv::Writer<File>>),
