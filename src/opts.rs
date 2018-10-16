@@ -101,23 +101,23 @@ impl Opts {
                 .sort_by(|a, b| a.file_name().cmp(b.file_name()))
                 .into_iter()
                 .filter_map(|e| match e {
-                    Ok(e) =>
-                    if let Ok(m) = e.metadata() {
-                         if !m.is_dir() && e.file_name()
-                                .to_string_lossy()
-                                .chars()
-                                .all(|c| match c {
+                    Ok(e) => {
+                        if let Ok(m) = e.metadata() {
+                            if !m.is_dir() && e.file_name().to_string_lossy().chars().all(|c| {
+                                match c {
                                     'a'..='f' | 'A'..='F' | '0'..='9' => true,
                                     _ => false,
-                                }) {
-                             info!("Found the fs events file {:?}", e.path());
+                                }
+                            }) {
+                                info!("Found the fs events file {:?}", e.path());
                                 Some(e.into_path())
                             } else {
                                 None
                             }
-                    } else {
-                        None
-                    },
+                        } else {
+                            None
+                        }
+                    }
 
                     Err(err) => {
                         error!("Error iterating the files: {}", err);
