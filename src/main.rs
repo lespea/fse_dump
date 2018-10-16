@@ -26,11 +26,7 @@ mod opts;
 mod record;
 mod version;
 
-use std::{
-    fs::File,
-    io,
-    sync::{Arc, Mutex},
-};
+use std::io;
 
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
@@ -45,30 +41,6 @@ fn main() -> io::Result<()> {
 
     let do_parallel = opts.parallel && opts.files.len() > 1;
 
-    let mut global_csv = if let Some(ref p) = opts.csv {
-        if !do_parallel {
-            Some(file_parser::CsvRecordWriter::Simple(Box::new(
-                csv::Writer::from_path(p)?,
-            )))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
-    let mut global_json = if let Some(ref p) = opts.json {
-        if !do_parallel {
-            Some(file_parser::JsonRecordWriter::Simple(io::BufWriter::new(
-                File::create(p)?,
-            )))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
     if do_parallel {
         use crossbeam::channel;
 
@@ -77,26 +49,9 @@ fn main() -> io::Result<()> {
         let single_csv = opts.csvs;
         let single_json = opts.jsons;
 
-        let csv_arc = if let Some(ref p) = opts.csv {
-            Some(Arc::new(Mutex::new(csv::Writer::from_path(p)?)))
-        } else {
-            None
-        };
-
-        let json_arc = if let Some(ref p) = opts.json {
-            Some(Arc::new(Mutex::new(io::BufWriter::new(File::create(p)?))))
-        } else {
-            None
-        };
-
         crossbeam::scope(|scope| {
             for _ in 0..num_cpus::get() {
                 let recv = recv.clone();
-
-                let mut global_csv = csv_arc.clone().map(file_parser::CsvRecordWriter::Threaded);
-                let mut global_json = json_arc
-                    .clone()
-                    .map(file_parser::JsonRecordWriter::Threaded);
 
                 scope.spawn(move || {
                     let mut buf = Vec::with_capacity(5000);
@@ -108,8 +63,7 @@ fn main() -> io::Result<()> {
                             &mut buf,
                             single_csv,
                             single_json,
-                            &mut global_csv,
-                            &mut global_json,
+                            None,
                         );
 
                         match parser {
@@ -133,15 +87,9 @@ fn main() -> io::Result<()> {
         let mut buf = Vec::with_capacity(5000);
         for f in opts.files.into_iter() {
             let p = f.to_string_lossy().to_string();
-            let result = file_parser::ParseOpts::for_path(
-                f,
-                &mut buf,
-                opts.csvs,
-                opts.jsons,
-                &mut global_csv,
-                &mut global_json,
-            )?
-            .parse_file();
+            let result =
+                file_parser::ParseOpts::for_path(f, &mut buf, opts.csvs, opts.jsons, None)?
+                    .parse_file();
 
             match result {
                 Ok(_) => info!("Finished parsing {}", p),

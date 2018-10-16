@@ -26,7 +26,7 @@ trait RecordParser {
         &self,
         reader: &mut BufRead,
         sbuf: &'a mut Vec<u8>,
-    ) -> io::Result<Option<(usize, Record<'a>)>> {
+    ) -> io::Result<Option<(usize, Record)>> {
         sbuf.clear();
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', sbuf)?;
@@ -35,7 +35,7 @@ trait RecordParser {
             Ok(None)
         } else {
             debug!("Reading path done");
-            let path = String::from_utf8_lossy(&sbuf[..rlen - 1]);
+            let path = String::from_utf8_lossy(&sbuf[..rlen - 1]).into_owned();
             debug!("Found path {}", path);
             let event_id = reader.read_u64::<BigEndian>()?;
             debug!("Found event id {}", event_id);
@@ -94,7 +94,7 @@ impl Version {
         &self,
         reader: &mut BufRead,
         sbuf: &'a mut Vec<u8>,
-    ) -> io::Result<Option<(usize, Record<'a>)>> {
+    ) -> io::Result<Option<(usize, Record)>> {
         match self {
             Version::Ver1(v) => v.parse_record(reader, sbuf),
             Version::Ver2(v) => v.parse_record(reader, sbuf),

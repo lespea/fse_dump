@@ -1,26 +1,15 @@
+use record;
 use version;
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use csv;
+use crossbeam::channel::Sender;
 use flate2::read::MultiGzDecoder;
 
 use std::{
-    borrow::BorrowMut,
     fs::File,
     io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
     path::PathBuf,
-    sync::{Arc, Mutex},
 };
-
-pub enum CsvRecordWriter {
-    Simple(Box<csv::Writer<File>>),
-    Threaded(Arc<Mutex<csv::Writer<File>>>),
-}
-
-pub enum JsonRecordWriter {
-    Simple(BufWriter<File>),
-    Threaded(Arc<Mutex<BufWriter<File>>>),
-}
 
 pub struct ParseOpts<'a> {
     reader: BufReader<MultiGzDecoder<File>>,
@@ -29,8 +18,7 @@ pub struct ParseOpts<'a> {
     csv_out: Option<csv::Writer<File>>,
     json_out: Option<BufWriter<File>>,
 
-    global_csv: &'a mut Option<CsvRecordWriter>,
-    global_json: &'a mut Option<JsonRecordWriter>,
+    channel: Option<Sender<record::Record>>,
 }
 
 impl<'a> ParseOpts<'a> {
@@ -39,8 +27,7 @@ impl<'a> ParseOpts<'a> {
         buf: &'a mut Vec<u8>,
         single_csv: bool,
         single_json: bool,
-        global_csv: &'a mut Option<CsvRecordWriter>,
-        global_json: &'a mut Option<JsonRecordWriter>,
+        channel: Option<Sender<record::Record>>,
     ) -> io::Result<ParseOpts<'a>> {
         let mut csv_out = None;
         let mut json_out = None;
@@ -75,8 +62,7 @@ impl<'a> ParseOpts<'a> {
             csv_out,
             json_out,
 
-            global_csv,
-            global_json,
+            channel,
         })
     }
 
@@ -129,31 +115,8 @@ impl<'a> ParseOpts<'a> {
                     writeln!(j.get_mut())?;
                 }
 
-                if let Some(ref mut c) = self.global_csv {
-                    match c {
-                        CsvRecordWriter::Simple(c) => c.serialize(&rec)?,
-
-                        CsvRecordWriter::Threaded(c) => c
-                            .lock()
-                            .expect("Couldn't lock the combined csv writer?")
-                            .serialize(&rec)?,
-                    }
-                }
-
-                if let Some(ref mut c) = self.global_json {
-                    match c {
-                        JsonRecordWriter::Simple(j) => {
-                            serde_json::ser::to_writer(j.get_mut(), &rec)?;
-                            writeln!(j.get_mut());
-                        }
-
-                        JsonRecordWriter::Threaded(j) => {
-                            let mut j = j.lock().expect("Couldn't lock the combined csv writer?");
-                            let j = j.borrow_mut();
-                            serde_json::ser::to_writer(j.get_mut(), &rec)?;
-                            writeln!(j.get_mut())?;
-                        }
-                    }
+                if let Some(ref chan) = self.channel {
+                    chan.send(rec)
                 }
 
                 if read >= p_len {
