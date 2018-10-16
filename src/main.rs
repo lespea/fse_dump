@@ -152,10 +152,6 @@ fn main() -> io::Result<()> {
                 };
             }
         }
-
-        if let Some(r) = rec_send {
-            drop(r)
-        }
     });
 
     Ok(())
