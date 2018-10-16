@@ -6,12 +6,10 @@ authors = ["Adam Lesperance <lespea@gmail.com>"]
 #edition = "2018"
 
 [dependencies]
-bitflags = "1"
 byteorder = "1"
 clap = "2"
 crossbeam = "0"
 csv = "1"
-enum-display-derive = "0.1"
 flate2 = "1"
 fnv = "1"
 lazy_static = "1"
