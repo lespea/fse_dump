@@ -1,3 +1,4 @@
+use io::{self, ErrorKind};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -47,6 +48,52 @@ pub struct Opts {
     pub files: Vec<PathBuf>,
 }
 
-pub fn get_opts() -> Opts {
-    Opts::from_args()
+fn stdout_path(path: &Option<PathBuf>) -> bool {
+    if let Some(p) = path {
+        p.to_string_lossy() == "-"
+    } else {
+        false
+    }
+}
+
+impl Opts {
+    fn validate(&self) -> io::Result<()> {
+        let mut counts = 0;
+        if stdout_path(&self.csv) {
+            counts += 1
+        };
+        if stdout_path(&self.json) {
+            counts += 1
+        };
+        if stdout_path(&self.uniques) {
+            counts += 1
+        };
+
+        if counts > 1 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "Can't have more than one file printing to stdout!",
+            ));
+        }
+
+        if !(self.csvs
+            || self.jsons
+            || self.csv.is_some()
+            || self.json.is_some()
+            || self.uniques.is_some())
+        {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "You must specify at least one output type!",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+pub fn get_opts() -> io::Result<Opts> {
+    let o = Opts::from_args();
+    o.validate()?;
+    Ok(o)
 }

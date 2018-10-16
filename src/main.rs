@@ -38,39 +38,56 @@ use std::{
 fn main() -> io::Result<()> {
     simple_logger::init_with_level(log::Level::Info).expect("Couldn't init logger");
 
-    let opts = opts::get_opts();
-    if !(opts.csvs || opts.jsons || opts.csv.is_some() || opts.json.is_some()) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "You must specify at least one output type!",
-        ));
-    }
-
+    let opts = opts::get_opts()?;
     let do_parallel = opts.parallel && opts.files.len() > 1;
 
-    let mut c_writer = if let Some(ref p) = opts.csv {
-        Some(csv::Writer::from_path(p)?)
-    } else {
-        None
-    };
-
-    let u_writer = if let Some(ref p) = opts.uniques {
-        Some(csv::Writer::from_path(p)?)
-    } else {
-        None
-    };
-
-    let mut j_writer = if let Some(ref p) = opts.json {
-        Some(BufWriter::new(File::create(p)?))
-    } else {
-        None
-    };
-
     crossbeam::scope(move |scope| {
-        let rec_send = if c_writer.is_some() || j_writer.is_some() {
+        let rec_send = if opts.csv.is_some() || opts.json.is_some() || opts.uniques.is_some() {
             let (send, recv) = channel::bounded::<record::Record>(5000);
 
+            let csv_path = opts.csv;
+            let json_path = opts.json;
+            let uniq_path = opts.uniques;
+
             scope.spawn(move || {
+                let stdout = io::stdout();
+
+                let mut c_writer: Option<csv::Writer<Box<io::Write>>> = if let Some(p) = csv_path {
+                    if p.to_string_lossy() == "-" {
+                        Some(csv::Writer::from_writer(Box::new(stdout.lock())))
+                    } else {
+                        Some(csv::Writer::from_writer(Box::new(
+                            File::create(p.clone()).expect("Couldn't create the csv file"),
+                        )))
+                    }
+                } else {
+                    None
+                };
+
+                let u_writer: Option<csv::Writer<Box<io::Write>>> = if let Some(p) = uniq_path {
+                    if p.to_string_lossy() == "-" {
+                        Some(csv::Writer::from_writer(Box::new(stdout.lock())))
+                    } else {
+                        Some(csv::Writer::from_writer(Box::new(
+                            File::create(p).expect("Couldn't create the uniques csv file"),
+                        )))
+                    }
+                } else {
+                    None
+                };
+
+                let mut j_writer: Option<Box<io::Write>> = if let Some(p) = json_path {
+                    if p.to_string_lossy() == "-" {
+                        Some(Box::new(stdout.lock()))
+                    } else {
+                        Some(Box::new(BufWriter::new(
+                            File::create(p).expect("Couldn't create the json out file"),
+                        )))
+                    }
+                } else {
+                    None
+                };
+
                 let want_uniques = u_writer.is_some();
                 let mut uniques = BTreeMap::new();
 
@@ -168,6 +185,8 @@ fn main() -> io::Result<()> {
                 };
             }
         }
+
+        drop(rec_send);
     });
 
     Ok(())
