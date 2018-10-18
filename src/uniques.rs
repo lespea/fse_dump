@@ -9,11 +9,13 @@ pub struct UniqueCounts {
 }
 
 impl UniqueCounts {
+    #[inline]
     pub fn update(&mut self, flag: u32) {
         self.counts += 1;
         self.flags |= flag;
     }
 
+    #[inline]
     pub fn into_unique_out(self, path: String) -> UniqueOut {
         UniqueOut {
             path,

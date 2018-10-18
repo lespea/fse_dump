@@ -1,13 +1,13 @@
-use record;
+use uniques;
 use version;
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use crossbeam::channel::Sender;
 use csv;
 use flate2::read::MultiGzDecoder;
 use serde_json;
 
 use std::{
+    collections::HashMap,
     fs::File,
     io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
     path::PathBuf,
@@ -20,7 +20,9 @@ pub struct ParseOpts<'a> {
     csv_out: Option<csv::Writer<File>>,
     json_out: Option<BufWriter<File>>,
 
-    channel: Option<Sender<record::Record>>,
+    all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
+    all_json: &'a mut Option<Box<io::Write>>,
+    uniques: &'a mut Option<HashMap<String, uniques::UniqueCounts>>,
 }
 
 impl<'a> ParseOpts<'a> {
@@ -29,7 +31,9 @@ impl<'a> ParseOpts<'a> {
         buf: &'a mut Vec<u8>,
         single_csv: bool,
         single_json: bool,
-        channel: Option<Sender<record::Record>>,
+        all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
+        all_json: &'a mut Option<Box<io::Write>>,
+        uniques: &'a mut Option<HashMap<String, uniques::UniqueCounts>>,
     ) -> io::Result<ParseOpts<'a>> {
         let mut csv_out = None;
         let mut json_out = None;
@@ -64,7 +68,9 @@ impl<'a> ParseOpts<'a> {
             csv_out,
             json_out,
 
-            channel,
+            all_csv,
+            all_json,
+            uniques,
         })
     }
 
@@ -112,13 +118,24 @@ impl<'a> ParseOpts<'a> {
                     c.serialize(&rec)?;
                 }
 
+                if let Some(ref mut c) = self.all_csv {
+                    c.serialize(&rec)?;
+                }
+
                 if let Some(ref mut j) = self.json_out {
                     serde_json::ser::to_writer(j.get_mut(), &rec)?;
                     writeln!(j.get_mut())?;
                 }
 
-                if let Some(ref chan) = self.channel {
-                    chan.send(rec)
+                if let Some(j) = self.all_json {
+                    serde_json::ser::to_writer(j.as_mut(), &rec)?;
+                    writeln!(j)?;
+                }
+
+                if let Some(u) = self.uniques {
+                    u.entry(rec.path.to_string())
+                        .or_insert_with(uniques::UniqueCounts::default)
+                        .update(rec.flag);
                 }
 
                 if read >= p_len {

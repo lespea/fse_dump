@@ -2,7 +2,7 @@ use structopt::StructOpt;
 use walkdir;
 
 use io::{self, ErrorKind};
-use std::path::PathBuf;
+use std::{ffi::OsStr, path::PathBuf};
 
 #[derive(Debug, StructOpt)]
 #[structopt()]
@@ -38,11 +38,6 @@ pub struct Opts {
     /// We'll combine all of the operations for each path so there is one entry per path
     #[structopt(short = "u", long = "unique", parse(from_os_str))]
     pub uniques: Option<PathBuf>,
-
-    /// If we should process things in parallel.  If outputting to a csv/json file no order is
-    /// guaranteed.
-    #[structopt(short = "p", long = "parallel")]
-    pub parallel: bool,
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
     /// that has a filename consisting solely of hex chars will be considered a file to parse
@@ -93,6 +88,14 @@ impl Opts {
         Ok(())
     }
 
+    #[inline]
+    fn want_filename(str: &OsStr) -> bool {
+        str.to_string_lossy().chars().all(|c| match c {
+            'a'..='f' | 'A'..='F' | '0'..='9' => true,
+            _ => false,
+        })
+    }
+
     pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
         self.files.iter().flat_map(|path| {
             walkdir::WalkDir::new(path)
@@ -103,12 +106,7 @@ impl Opts {
                 .filter_map(|e| match e {
                     Ok(e) => {
                         if let Ok(m) = e.metadata() {
-                            if !m.is_dir() && e.file_name().to_string_lossy().chars().all(|c| {
-                                match c {
-                                    'a'..='f' | 'A'..='F' | '0'..='9' => true,
-                                    _ => false,
-                                }
-                            }) {
+                            if !m.is_dir() && Opts::want_filename(e.file_name()) {
                                 info!("Found the fs events file {:?}", e.path());
                                 Some(e.into_path())
                             } else {

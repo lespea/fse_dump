@@ -8,13 +8,11 @@ authors = ["Adam Lesperance <lespea@gmail.com>"]
 [dependencies]
 byteorder = "1"
 clap = "2"
-crossbeam = "0"
 csv = "1"
 flate2 = "1"
 fnv = "1"
 lazy_static = "1"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
-num_cpus = "1"
 serde = { version = "1", features = ["rc"] }
 serde_derive = "1"
 serde_json = "1"

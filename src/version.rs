@@ -22,11 +22,12 @@ pub enum Version {
 trait RecordParser {
     const HAS_NODEID: bool;
 
+    #[inline]
     fn parse_record<'a>(
         &self,
         reader: &mut BufRead,
         sbuf: &'a mut Vec<u8>,
-    ) -> io::Result<Option<(usize, Record)>> {
+    ) -> io::Result<Option<(usize, Record<'a>)>> {
         sbuf.clear();
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', sbuf)?;
@@ -35,7 +36,7 @@ trait RecordParser {
             Ok(None)
         } else {
             debug!("Reading path done");
-            let path = String::from_utf8_lossy(&sbuf[..rlen - 1]).into_owned();
+            let path = String::from_utf8_lossy(&sbuf[..rlen - 1]);
             debug!("Found path {}", path);
             let event_id = reader.read_u64::<BigEndian>()?;
             debug!("Found event id {}", event_id);
@@ -83,6 +84,7 @@ impl RecordParser for V2 {
 }
 
 impl Version {
+    #[inline]
     pub fn from_reader(reader: &mut BufRead) -> io::Result<Option<Version>> {
         let mut b = [0u8; 4];
         reader.read_exact(&mut b)?;
@@ -93,11 +95,12 @@ impl Version {
         }
     }
 
+    #[inline]
     pub fn parse_record<'a>(
         &self,
         reader: &mut BufRead,
         sbuf: &'a mut Vec<u8>,
-    ) -> io::Result<Option<(usize, Record)>> {
+    ) -> io::Result<Option<(usize, Record<'a>)>> {
         match self {
             Version::Ver1(v) => v.parse_record(reader, sbuf),
             Version::Ver2(v) => v.parse_record(reader, sbuf),
