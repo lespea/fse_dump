@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn simple_bits_to_strs() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         for (name, flag) in FLAGS.iter() {
             assert_eq!(bits_to_str(*flag), name.to_owned());
             assert_eq!(bits_to_str(*flag), (*name).to_owned());
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn complex_bits_to_strs() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let (combo_str, combo_num) = FLAGS.iter().take(3).fold(
             (String::with_capacity(500), 0u32),
             |(mut string, flag), (new_str, new_flag)| {
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn simple_parse_bits() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         for (name, flag) in FLAGS.iter() {
             assert_eq!(*parse_bits(*flag), (*name).to_owned());
             assert_eq!(*parse_bits(*flag), (*name).to_owned());
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn complex_parse_bits() {
-        let _ = env_logger::init();
+        let _ = env_logger::try_init();
         let (combo_str, combo_num) = FLAGS.iter().take(3).fold(
             (String::with_capacity(500), 0u32),
             |(mut string, flag), (new_str, new_flag)| {
