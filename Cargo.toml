@@ -1,9 +1,18 @@
 [package]
 name = "fse_dump"
-description = "dump the fs events files on macs"
+description = "Dump the fs events files on macs"
+
 version = "0.1.0"
+
 authors = ["Adam Lesperance <lespea@gmail.com>"]
-#edition = "2018"
+categories = ["parsing", "forensics"]
+keywords = ["mac", "fseventsd", "security", "forensics"]
+
+license = "Apache-2.0"
+readme = "README.md"
+
+homepage = "https://github.com/lespea/fse_dump"
+repository = "https://github.com/lespea/fse_dump
 
 [dependencies]
 byteorder = "1"
