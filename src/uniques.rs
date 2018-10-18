@@ -16,7 +16,7 @@ impl UniqueCounts {
     }
 
     #[inline]
-    pub fn into_unique_out(self, path: String) -> UniqueOut {
+    pub fn to_unique_out<'a>(&self, path: &'a str) -> UniqueOut<'a> {
         UniqueOut {
             path,
             counts: self.counts,
@@ -25,9 +25,9 @@ impl UniqueCounts {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
-pub struct UniqueOut {
-    path: String,
+#[derive(Debug, Serialize)]
+pub struct UniqueOut<'a> {
+    path: &'a str,
     counts: u64,
     flags: Arc<String>,
 }

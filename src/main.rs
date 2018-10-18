@@ -69,7 +69,7 @@ fn main() -> io::Result<()> {
     };
 
     let mut uniques = if opts.uniques.is_some() {
-        Some(HashMap::new())
+        Some(HashMap::with_capacity(10_000))
     } else {
         None
     };
@@ -107,9 +107,13 @@ fn main() -> io::Result<()> {
                     ))
                 };
 
-                for (path, entry) in u {
-                    c.serialize(entry.into_unique_out(path))
-                        .expect("Error writing the uniques");
+                let mut keys: Vec<&String> = u.keys().collect();
+                keys.sort_unstable_by_key(|ref k| k.to_lowercase());
+
+                for path in keys.into_iter() {
+                    let mut v = &u[path];
+                    let uo = v.to_unique_out(path.as_ref());
+                    c.serialize(uo).expect("Error writing the uniques");
                 }
             };
         }
