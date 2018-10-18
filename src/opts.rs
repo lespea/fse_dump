@@ -54,7 +54,7 @@ fn stdout_path(path: &Option<PathBuf>) -> bool {
 }
 
 impl Opts {
-    fn validate(&self) -> io::Result<()> {
+    pub fn validate(&self) -> io::Result<(bool)> {
         let mut counts = 0;
         if stdout_path(&self.csv) {
             counts += 1
@@ -85,7 +85,7 @@ impl Opts {
             ));
         }
 
-        Ok(())
+        Ok(counts == 1)
     }
 
     #[inline]
@@ -127,7 +127,5 @@ impl Opts {
 }
 
 pub fn get_opts() -> io::Result<Opts> {
-    let o = Opts::from_args();
-    o.validate()?;
-    Ok(o)
+    Ok( Opts::from_args())
 }

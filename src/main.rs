@@ -33,13 +33,14 @@ use std::{
 };
 
 fn main() -> io::Result<()> {
+    let opts = opts::get_opts()?;
+    let has_std = opts.validate()?;
+
     env_logger::Builder::new()
-        .filter(None, LevelFilter::Info)
+        .filter(None, if has_std {LevelFilter::Info} else {LevelFilter::Error})
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();
-
-    let opts = opts::get_opts()?;
 
     let mut buf = Vec::with_capacity(5000);
     let stdout = io::stdout();
