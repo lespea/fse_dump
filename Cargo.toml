@@ -5,7 +5,7 @@ description = "Dumps the fseventsd entries from a mac"
 version = "0.1.0"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
-categories = ["parsing", "forensics"]
+categories = ["parsing", "command-line-utilities"]
 keywords = ["mac", "fseventsd", "security", "forensics"]
 
 license = "Apache-2.0"
