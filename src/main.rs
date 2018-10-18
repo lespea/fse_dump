@@ -37,7 +37,14 @@ fn main() -> io::Result<()> {
     let has_std = opts.validate()?;
 
     env_logger::Builder::new()
-        .filter(None, if has_std {LevelFilter::Info} else {LevelFilter::Error})
+        .filter(
+            None,
+            if has_std {
+                LevelFilter::Info
+            } else {
+                LevelFilter::Error
+            },
+        )
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();

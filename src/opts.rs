@@ -127,5 +127,5 @@ impl Opts {
 }
 
 pub fn get_opts() -> io::Result<Opts> {
-    Ok( Opts::from_args())
+    Ok(Opts::from_args())
 }
