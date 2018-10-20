@@ -7,7 +7,7 @@ use flate2::read::MultiGzDecoder;
 use serde_json;
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::File,
     io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
     path::PathBuf,
@@ -22,7 +22,7 @@ pub struct ParseOpts<'a> {
 
     all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
     all_json: &'a mut Option<Box<io::Write>>,
-    uniques: &'a mut Option<HashMap<String, uniques::UniqueCounts>>,
+    uniques: &'a mut Option<BTreeMap<String, uniques::UniqueCounts>>,
 }
 
 impl<'a> ParseOpts<'a> {
@@ -33,7 +33,7 @@ impl<'a> ParseOpts<'a> {
         single_json: bool,
         all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
         all_json: &'a mut Option<Box<io::Write>>,
-        uniques: &'a mut Option<HashMap<String, uniques::UniqueCounts>>,
+        uniques: &'a mut Option<BTreeMap<String, uniques::UniqueCounts>>,
     ) -> io::Result<ParseOpts<'a>> {
         let mut csv_out = None;
         let mut json_out = None;

@@ -27,7 +27,7 @@ use env_logger::{Target, WriteStyle};
 
 use log::LevelFilter;
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::File,
     io::{self, BufWriter},
 };
@@ -77,7 +77,7 @@ fn main() -> io::Result<()> {
     };
 
     let mut uniques = if opts.uniques.is_some() {
-        Some(HashMap::with_capacity(10_000))
+        Some(BTreeMap::new())
     } else {
         None
     };
@@ -115,12 +115,8 @@ fn main() -> io::Result<()> {
                     ))
                 };
 
-                let mut keys: Vec<&String> = u.keys().collect();
-                keys.sort_unstable_by_key(|ref k| k.to_lowercase());
-
-                for path in keys {
-                    let mut v = &u[path];
-                    let uo = v.to_unique_out(path.as_ref());
+                for (path, v) in u {
+                    let uo = v.to_unique_out(path);
                     c.serialize(uo).expect("Error writing the uniques");
                 }
             };
