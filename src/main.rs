@@ -118,7 +118,7 @@ fn main() -> io::Result<()> {
                 let mut keys: Vec<&String> = u.keys().collect();
                 keys.sort_unstable_by_key(|ref k| k.to_lowercase());
 
-                for path in keys.into_iter() {
+                for path in keys {
                     let mut v = &u[path];
                     let uo = v.to_unique_out(path.as_ref());
                     c.serialize(uo).expect("Error writing the uniques");
