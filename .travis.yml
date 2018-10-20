@@ -2,13 +2,13 @@ language: rust
 sudo: false
 cache: cargo
 matrix:
-  allow_failures:
-  - rust: nightly
-  - os: windows
+#  allow_failures:
+#  - rust: nightly
+#  - os: windows
   fast_finish: true
   include:
   - rust: stable
-  - rust: nightly
+#  - rust: nightly
   - name: Clippy
     rust: nightly
     before_script: rustup component add clippy-preview
@@ -26,11 +26,11 @@ matrix:
     - cargo build --verbose --all --release
     - cargo test --verbose --all --release
     - cargo doc --verbose --all --release
-  - os: osx
-    osx_image: xcode10
-  - os: windows
+#  - os: osx
+#    osx_image: xcode10
+#  - os: windows
   - os: linux
-before_deploy: ci/before_deploy.sh
+before_deploy: ci/deploy.sh
 deploy:
   provider: releases
   file_glob: true
