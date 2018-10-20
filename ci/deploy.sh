@@ -1,3 +1,3 @@
 #!/usr/bin/env sh
 
-zip "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}".zip "target/$TARGET/fse_dump"
+tar cvf "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}.tar" "target/$TARGET/fse_dump"
