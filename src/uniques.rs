@@ -16,7 +16,7 @@ impl UniqueCounts {
     }
 
     #[inline]
-    pub fn to_unique_out(&self, path: String) -> UniqueOut {
+    pub fn into_unique_out(self, path: String) -> UniqueOut {
         UniqueOut {
             path,
             counts: self.counts,

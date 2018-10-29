@@ -1,13 +1,12 @@
-use uniques;
 use version;
 
 use byteorder::{LittleEndian, ReadBytesExt};
+use channel;
 use csv;
 use flate2::read::MultiGzDecoder;
 use serde_json;
 
 use std::{
-    collections::BTreeMap,
     fs::File,
     io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
     path::PathBuf,
@@ -22,7 +21,7 @@ pub struct ParseOpts<'a> {
 
     all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
     all_json: &'a mut Option<Box<io::Write>>,
-    uniques: &'a mut Option<BTreeMap<String, uniques::UniqueCounts>>,
+    uniques: &'a Option<channel::Sender<(String, u32)>>,
 }
 
 impl<'a> ParseOpts<'a> {
@@ -33,7 +32,7 @@ impl<'a> ParseOpts<'a> {
         single_json: bool,
         all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
         all_json: &'a mut Option<Box<io::Write>>,
-        uniques: &'a mut Option<BTreeMap<String, uniques::UniqueCounts>>,
+        uniques: &'a Option<channel::Sender<(String, u32)>>,
     ) -> io::Result<ParseOpts<'a>> {
         let mut csv_out = None;
         let mut json_out = None;
@@ -133,9 +132,7 @@ impl<'a> ParseOpts<'a> {
                 }
 
                 if let Some(u) = self.uniques {
-                    u.entry(rec.path.to_string())
-                        .or_insert_with(uniques::UniqueCounts::default)
-                        .update(rec.flag);
+                    u.send((rec.path.to_string(), rec.flag));
                 }
 
                 if read >= p_len {

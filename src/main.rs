@@ -8,6 +8,8 @@ extern crate serde_derive;
 extern crate structopt;
 
 extern crate byteorder;
+extern crate crossbeam;
+extern crate crossbeam_channel as channel;
 extern crate csv;
 extern crate env_logger;
 extern crate flate2;
@@ -30,6 +32,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, BufWriter},
+    thread,
 };
 
 fn main() -> io::Result<()> {
@@ -76,10 +79,36 @@ fn main() -> io::Result<()> {
         None
     };
 
-    let mut uniques = if opts.uniques.is_some() {
-        Some(BTreeMap::new())
+    let (send, thr) = if let Some(ref upath) = opts.uniques {
+        let (send, recv) = channel::bounded(1000);
+        let upath = upath.clone();
+
+        let t = thread::spawn(move || {
+            let mut c: csv::Writer<Box<io::Write>> = if upath.to_string_lossy() == "-" {
+                csv::Writer::from_writer(Box::new(stdout.lock()))
+            } else {
+                csv::Writer::from_writer(Box::new(
+                    File::create(upath).expect("Couldn't create the uniques csv file"),
+                ))
+            };
+
+            let mut u = BTreeMap::new();
+
+            for (path, flag) in recv {
+                u.entry(path)
+                    .or_insert_with(uniques::UniqueCounts::default)
+                    .update(flag);
+            }
+
+            for (path, v) in u {
+                c.serialize(v.into_unique_out(path))
+                    .expect("Error writing the uniques");
+            }
+        });
+
+        (Some(send), Some(t))
     } else {
-        None
+        (None, None)
     };
 
     for f in opts.real_files() {
@@ -91,7 +120,7 @@ fn main() -> io::Result<()> {
             opts.jsons,
             &mut c_writer,
             &mut j_writer,
-            &mut uniques,
+            &send,
         );
 
         match parser {
@@ -104,24 +133,14 @@ fn main() -> io::Result<()> {
         };
     }
 
-    if let Some(u) = uniques {
-        if !u.is_empty() {
-            if let Some(p) = opts.uniques {
-                let mut c: csv::Writer<Box<io::Write>> = if p.to_string_lossy() == "-" {
-                    csv::Writer::from_writer(Box::new(stdout.lock()))
-                } else {
-                    csv::Writer::from_writer(Box::new(
-                        File::create(p).expect("Couldn't create the uniques csv file"),
-                    ))
-                };
+    // Close the send channel
+    if let Some(_s) = send {}
 
-                for (path, v) in u {
-                    let uo = v.to_unique_out(path);
-                    c.serialize(uo).expect("Error writing the uniques");
-                }
-            };
+    if let Some(t) = thr {
+        if let Err(e) = t.join() {
+            error!("Couldn't join the unique thread: {:?}", e);
         }
-    }
+    };
 
     Ok(())
 }
