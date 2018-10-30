@@ -2,13 +2,13 @@ language: rust
 sudo: false
 cache: cargo
 matrix:
-#  allow_failures:
-#  - rust: nightly
-#  - os: windows
+  allow_failures:
+  - rust: nightly
+  - os: windows
   fast_finish: true
   include:
   - rust: stable
-#  - rust: nightly
+  - rust: nightly
   - name: Clippy
     rust: nightly
     before_script: rustup component add clippy-preview
@@ -26,22 +26,22 @@ matrix:
     - cargo build --all --release
     - cargo test --all --release
     - cargo doc --all --release
-#  - os: osx
-#    osx_image: xcode10
-#  - os: windows
+  - os: osx
+    osx_image: xcode10
+  - os: windows
   - os: linux
-before_deploy: ci/deploy.sh
-deploy:
-  provider: releases
-  file_glob: true
-  file: "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}.tar"
-  skip_cleanup: true
-  on:
-    condition: "$TRAVIS_RUST_VERSION = stable"
-    branch: master
-    tags: true
-  api:
-    secure: mTp1YRZi4eJ9htDXzl8l78nlIFdEOOTCs9YEN7ai5ZtbEFwrah2iX/2ofF6ZBGFXpENzXzeaR2xHvJ/9WcucQ0ByatEAO0hlijtxCpIOyuR/bJhIFugGUHn14hgg7Y82tpOC146fufCANMplrmcgL14eo7D2Sam/0xqF+QS2fpuNvKBiU8Wzl3EgUX3hOhrokaM+5KpwomVIw5Jht4zfmAkLe0NDoZWWybc9/ZATiMehxr4FD6pShVwWm4cnbZeuxP7cFbnez4NN1gh9WvRaglSrXtALZ6xgBnDVTK9bHYa1ZKWXLjf8bcqf7PsMPQuT+ak39zFc/SIumjSciU84uS9o2oL2U3ilBwAMQlNYTJ6QgNwhzq81Mn6Gq8Tfl6/ilIEAZ1SjtW8SQyxZUSYCjJK1b7Dgs3GxQ2LjRMShbFY1H1I0L9UatAekDjWcRc8QNwB8pJVt1Vwc2aBrWvUI6tcezs0XmBE1NPX3uHCHuY0LAJsvqyQyIVdvUc0fhXT8srhnwzzfGUKDUBcC9scat6DnqCGgUYpblLNlDPNpDAMBTuqy8/ivxdyIUKo6zzUG7QMNIJXYbs7WCSQ+LHUIrgDxiXtQk1WCi2bEVzU7QHZfpCh4/Ei2GrHcVaO7zcIKwBkmalNkVJxUCMjMxMCrkzU2IdftSKY7+wrO9fl2xNc=
+#before_deploy: ci/deploy.sh
+#deploy:
+#  provider: releases
+#  file_glob: true
+#  file: "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}.tar"
+#  skip_cleanup: true
+#  on:
+#    condition: "$TRAVIS_RUST_VERSION = stable"
+#    branch: master
+#    tags: true
+#  api:
+#    secure: mTp1YRZi4eJ9htDXzl8l78nlIFdEOOTCs9YEN7ai5ZtbEFwrah2iX/2ofF6ZBGFXpENzXzeaR2xHvJ/9WcucQ0ByatEAO0hlijtxCpIOyuR/bJhIFugGUHn14hgg7Y82tpOC146fufCANMplrmcgL14eo7D2Sam/0xqF+QS2fpuNvKBiU8Wzl3EgUX3hOhrokaM+5KpwomVIw5Jht4zfmAkLe0NDoZWWybc9/ZATiMehxr4FD6pShVwWm4cnbZeuxP7cFbnez4NN1gh9WvRaglSrXtALZ6xgBnDVTK9bHYa1ZKWXLjf8bcqf7PsMPQuT+ak39zFc/SIumjSciU84uS9o2oL2U3ilBwAMQlNYTJ6QgNwhzq81Mn6Gq8Tfl6/ilIEAZ1SjtW8SQyxZUSYCjJK1b7Dgs3GxQ2LjRMShbFY1H1I0L9UatAekDjWcRc8QNwB8pJVt1Vwc2aBrWvUI6tcezs0XmBE1NPX3uHCHuY0LAJsvqyQyIVdvUc0fhXT8srhnwzzfGUKDUBcC9scat6DnqCGgUYpblLNlDPNpDAMBTuqy8/ivxdyIUKo6zzUG7QMNIJXYbs7WCSQ+LHUIrgDxiXtQk1WCi2bEVzU7QHZfpCh4/Ei2GrHcVaO7zcIKwBkmalNkVJxUCMjMxMCrkzU2IdftSKY7+wrO9fl2xNc=
 script:
 - cargo build --all
 - cargo test --all
