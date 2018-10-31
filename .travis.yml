@@ -4,6 +4,10 @@ cache: cargo
 
 env:
   global:
+    # Default target on travis-ci.
+    # Used as conditional check in the install stage
+    - HOST=x86_64-unknown-linux-gnu
+
     # Used on the deployment script
     - PROJECT_NAME=fse_dump
 
@@ -15,9 +19,6 @@ matrix:
   fast_finish: true
 
   include:
-  - rust: stable
-  - rust: nightly
-
   - name: Clippy
     rust: nightly
     before_script: rustup component add clippy-preview
@@ -41,14 +42,38 @@ matrix:
     on:
       tags: true
 
+  - os: linux
+    rust: stable
+    env:
+     - TARGET=x86_64-unknown-linux-gnu
+     - EXE=x86_64-linux-gnu
+  - os: linux
+    rust: stable
+    env:
+     - TARGET=x86_64-unknown-linux-musl
+     - EXE=x86_64-linux-musl
   - os: osx
     osx_image: xcode10
-
+    rust: stable
+    env:
+     - TARGET=x86_64-apple-darwin
+     - EXE=darwin
   - os: windows
+    rust: stable
+    env:
+     - TARGET=x86_64-pc-windows-msvc
+     - EXE=64
+  - os: windows
+    rust: stable
+    env:
+     - TARGET=i686-pc-windows-msvc
+     - EXE=32
 
   - os: linux
+    rust: nightly
+    env: TARGET=x86_64-unknown-linux-gnu
 
-before_deploy: ci/deploy.sh
+before_deploy: ci/before_deploy.bash
 
 deploy:
   provider: releases
@@ -63,6 +88,4 @@ deploy:
     secure: PCRC1AYGYksGfRqUpNglgaOh2t+Jnmv/hd+K4ClScx2OQpjvFZyj1XTJsBN/Ze6VzyQR6dJH5b1g6LRSdF8qB364IOS5L4M6xFov9e1im14TrVDfGf7Dc5Qp4YvqKj+p6FcXwaLbq+AaDJeBfHVmgrI6TyjuYDmOMcaURMlzVCCeNpwkJobKji/Kua8HupYW+Tv/nviZtwhQJZ6EbjWjr65l5BdIEHpRiutjWDR14waa+Mx97ffInzoxCBtJJnU8RRz7uinxwXNF24vcJHy1eocZGJ/jt423beOGUE5NU42aSmXz3HpPquUf/WPp2Pc2SJOa0gK0ZVlu1BBxgO97lruQlQn285wFUDCX4EcrADtPHaTCCDp6YCKajBymEW6M60bKFMG/4YL4S9smYkLroy+dLUlUkBLLM+FdLRi0peYpfaJLHkga2z2/eA6xzHzqj3lrDkEfRgVa2aiJq5p3ZsBqBqKRNSVshZZr95GRmiVah5tsc5REKgOumyvhG8Fqt+MmG+ql502kT5aGhBxk3YswvzQZeUSB/8ACD2Lxc55vUE8Y9wbP4AGo59jPd6h/tC+9LDZRmKF2+20qtV5qfB4vl0JUyFtP7FComvN+I8dQSviH+PWOIvnPz2MCJs9f6xoBr4FAqqODpsMjqUTHMZYZzRufdBGp+aIBMQL2Qz0=
 
 script:
-- cargo build --all
-- cargo test --all
-- cargo doc --all
+  - ci/script.bash
