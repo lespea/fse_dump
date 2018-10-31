@@ -4,17 +4,17 @@ cache: cargo
 
 env:
   global:
-    # Default target on travis-ci.
-    # Used as conditional check in the install stage
-    - HOST=x86_64-unknown-linux-gnu
+  # Default target on travis-ci.
+  # Used as conditional check in the install stage
+  - HOST=x86_64-unknown-linux-gnu
 
-    # Used on the deployment script
-    - PROJECT_NAME=fse_dump
+  # Used on the deployment script
+  - PROJECT_NAME=fse_dump
 
 install:
-  # prevent target re-add error from rustup
-  - if [[ $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
-  - if [[ $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
+# prevent target re-add error from rustup
+- if [[ $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
+- if [[ $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
 
 matrix:
   allow_failures:
@@ -34,41 +34,65 @@ matrix:
     before_script: rustup component add rustfmt-preview
     script: cargo fmt --all -- --check
 
-#  - name: release
-#    rust: stable
-#    script:
-#    - cargo build --all --release
-#    - cargo test --all --release
-#    - cargo doc --all --release
-#    on:
-#      tags: true
+  #  - name: release
+  #    rust: stable
+  #    script:
+  #    - cargo build --all --release
+  #    - cargo test --all --release
+  #    - cargo doc --all --release
+  #    on:
+  #      tags: true
 
   - os: linux
     rust: stable
     env:
-     - TARGET=x86_64-unknown-linux-gnu
-     - EXE=x86_64-linux-gnu
+    - TARGET=x86_64-unknown-linux-gnu
+    - EXE=x86_64-linux-gnu
   - os: linux
     rust: stable
     env:
-     - TARGET=x86_64-unknown-linux-musl
-     - EXE=x86_64-linux-musl
+    - TARGET=x86_64-unknown-linux-musl
+    - EXE=x86_64-linux-musl
+    addons:
+      apt:
+        packages: &musl_packages
+        - musl
+        - musl-dev
+        - musl-tools
+  - os: linux
+    rust: stable
+    env:
+    - TARGET=i686-unknown-linux-gnu
+    - EXE=i686-linux-gnu
+    addons:
+      apt:
+        packages: &i686_unknown_linux_gnu
+        # Cross compiler and cross compiled C libraries
+        - gcc-multilib
+  - os: linux
+    rust: stable
+    env:
+    - TARGET=i686-unknown-linux-musl
+    - EXE=i686-linux-musl
+    addons:
+      apt:
+        packages: *musl_packages
   - os: osx
     osx_image: xcode10
     rust: stable
     env:
-     - TARGET=x86_64-apple-darwin
-     - EXE=darwin
+    - TARGET=x86_64-apple-darwin
+    - EXE=darwin
   - os: windows
     rust: stable
     env:
-     - TARGET=x86_64-pc-windows-msvc
-     - EXE=64bit
+    - TARGET=x86_64-pc-windows-msvc
+    - EXE=64bit
   - os: windows
     rust: stable
     env:
-     - TARGET=i686-pc-windows-msvc
-     - EXE=32bit
+    - TARGET=i686-pc-windows-msvc
+    - EXE=32bit
 
   - os: linux
     rust: nightly
@@ -89,4 +113,4 @@ deploy:
     secure: PCRC1AYGYksGfRqUpNglgaOh2t+Jnmv/hd+K4ClScx2OQpjvFZyj1XTJsBN/Ze6VzyQR6dJH5b1g6LRSdF8qB364IOS5L4M6xFov9e1im14TrVDfGf7Dc5Qp4YvqKj+p6FcXwaLbq+AaDJeBfHVmgrI6TyjuYDmOMcaURMlzVCCeNpwkJobKji/Kua8HupYW+Tv/nviZtwhQJZ6EbjWjr65l5BdIEHpRiutjWDR14waa+Mx97ffInzoxCBtJJnU8RRz7uinxwXNF24vcJHy1eocZGJ/jt423beOGUE5NU42aSmXz3HpPquUf/WPp2Pc2SJOa0gK0ZVlu1BBxgO97lruQlQn285wFUDCX4EcrADtPHaTCCDp6YCKajBymEW6M60bKFMG/4YL4S9smYkLroy+dLUlUkBLLM+FdLRi0peYpfaJLHkga2z2/eA6xzHzqj3lrDkEfRgVa2aiJq5p3ZsBqBqKRNSVshZZr95GRmiVah5tsc5REKgOumyvhG8Fqt+MmG+ql502kT5aGhBxk3YswvzQZeUSB/8ACD2Lxc55vUE8Y9wbP4AGo59jPd6h/tC+9LDZRmKF2+20qtV5qfB4vl0JUyFtP7FComvN+I8dQSviH+PWOIvnPz2MCJs9f6xoBr4FAqqODpsMjqUTHMZYZzRufdBGp+aIBMQL2Qz0=
 
 script:
-  - ci/script.bash
+- ci/script.bash
