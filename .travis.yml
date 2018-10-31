@@ -69,16 +69,16 @@ matrix:
         packages: &i686_unknown_linux_gnu
         # Cross compiler and cross compiled C libraries
         - gcc-multilib
-  - os: linux
-    rust: stable
-    env:
-    - TARGET=i686-unknown-linux-musl
-    - EXE=i686-linux-musl
-    addons:
-      apt:
-        packages:
-        - *musl_packages
-        - *i686_unknown_linux_gnu
+  #- os: linux
+  #  rust: stable
+  #  env:
+  #  - TARGET=i686-unknown-linux-musl
+  #  - EXE=i686-linux-musl
+  #  addons:
+  #    apt:
+  #      packages:
+  #      - *musl_packages
+  #      - *i686_unknown_linux_gnu
   - os: osx
     osx_image: xcode10
     rust: stable
