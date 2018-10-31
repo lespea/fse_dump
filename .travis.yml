@@ -13,8 +13,8 @@ env:
 
 install:
 # prevent target re-add error from rustup
-- if [[ $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
-- if [[ $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
+- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
+- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
 
 matrix:
   allow_failures:
@@ -76,7 +76,9 @@ matrix:
     - EXE=i686-linux-musl
     addons:
       apt:
-        packages: *musl_packages
+        packages:
+        - *musl_packages
+        - *i686_unknown_linux_gnu
   - os: osx
     osx_image: xcode10
     rust: stable
