@@ -5,6 +5,8 @@ set -ex
 
 build() {
     cargo build --target "$TARGET" --release --verbose
+    cargo test --all --release
+    cargo doc --all --release
 }
 
 pack() {
@@ -12,6 +14,7 @@ pack() {
     if [[ "$TRAVIS_OS_NAME" == 'windows' ]]; then
         cp "target/$TARGET/release/${PROJECT_NAME}.exe" "pfiles/${PROJECT_NAME}-${TRAVIS_TAG}-${EXE}.exe"
     else
+        strip "target/$TARGET/release/${PROJECT_NAME}"
         cp "target/$TARGET/release/${PROJECT_NAME}" "pfiles/${PROJECT_NAME}-${TRAVIS_TAG}-${EXE}"
     fi
 }

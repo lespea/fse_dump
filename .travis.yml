@@ -11,6 +11,11 @@ env:
     # Used on the deployment script
     - PROJECT_NAME=fse_dump
 
+install:
+  # prevent target re-add error from rustup
+  - if [[ $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
+  - if [[ $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
+
 matrix:
   allow_failures:
   - rust: nightly
@@ -29,18 +34,14 @@ matrix:
     before_script: rustup component add rustfmt-preview
     script: cargo fmt --all -- --check
 
-  - name: warnings
-    rust: stable
-    script: cargo check --all
-
-  - name: release
-    rust: stable
-    script:
-    - cargo build --all --release
-    - cargo test --all --release
-    - cargo doc --all --release
-    on:
-      tags: true
+#  - name: release
+#    rust: stable
+#    script:
+#    - cargo build --all --release
+#    - cargo test --all --release
+#    - cargo doc --all --release
+#    on:
+#      tags: true
 
   - os: linux
     rust: stable
