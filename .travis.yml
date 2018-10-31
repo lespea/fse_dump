@@ -1,48 +1,118 @@
 language: rust
 sudo: false
 cache: cargo
+
+env:
+  global:
+  # Default target on travis-ci.
+  # Used as conditional check in the install stage
+  - HOST=x86_64-unknown-linux-gnu
+
+  # Used on the deployment script
+  - PROJECT_NAME=fse_dump
+
+install:
+# prevent target re-add error from rustup
+- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
+- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = windows && $TARGET != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
+
 matrix:
   allow_failures:
   - rust: nightly
   - os: windows
+
   fast_finish: true
+
   include:
-  - rust: stable
-  - rust: nightly
   - name: Clippy
     rust: nightly
     before_script: rustup component add clippy-preview
     script: cargo clippy --all -- -D clippy
+
   - name: rustfmt
     rust: nightly
     before_script: rustup component add rustfmt-preview
     script: cargo fmt --all -- --check
-  - name: warnings
+
+  #  - name: release
+  #    rust: stable
+  #    script:
+  #    - cargo build --all --release
+  #    - cargo test --all --release
+  #    - cargo doc --all --release
+  #    on:
+  #      tags: true
+
+  - os: linux
     rust: stable
-    script: cargo check --all
-  - name: release
+    env:
+    - TARGET=x86_64-unknown-linux-gnu
+    - EXE=linux-gnu-x64
+  - os: linux
     rust: stable
-    script:
-    - cargo build --all --release
-    - cargo test --all --release
-    - cargo doc --all --release
+    env:
+    - TARGET=x86_64-unknown-linux-musl
+    - EXE=linux-musl-x64
+    addons:
+      apt:
+        packages: &musl_packages
+        - musl
+        - musl-dev
+        - musl-tools
+  - os: linux
+    rust: stable
+    env:
+    - TARGET=i686-unknown-linux-gnu
+    - EXE=linux-gnu-i686
+    addons:
+      apt:
+        packages: &i686_unknown_linux_gnu
+        # Cross compiler and cross compiled C libraries
+        - gcc-multilib
+  #- os: linux
+  #  rust: stable
+  #  env:
+  #  - TARGET=i686-unknown-linux-musl
+  #  - EXE=linux-musl-i686
+  #  addons:
+  #    apt:
+  #      packages:
+  #      - *musl_packages
+  #      - *i686_unknown_linux_gnu
   - os: osx
     osx_image: xcode10
+    rust: stable
+    env:
+    - TARGET=x86_64-apple-darwin
+    - EXE=darwin
   - os: windows
+    rust: stable
+    env:
+    - TARGET=x86_64-pc-windows-msvc
+    - EXE=windows-x64
+  - os: windows
+    rust: stable
+    env:
+    - TARGET=i686-pc-windows-msvc
+    - EXE=windows-i686
+
   - os: linux
-#before_deploy: ci/deploy.sh
-#deploy:
-#  provider: releases
-#  file_glob: true
-#  file: "${PROJECT_NAME}-${TRAVIS_TAG}-${TARGET}.tar"
-#  skip_cleanup: true
-#  on:
-#    condition: "$TRAVIS_RUST_VERSION = stable"
-#    branch: master
-#    tags: true
-#  api:
-#    secure: mTp1YRZi4eJ9htDXzl8l78nlIFdEOOTCs9YEN7ai5ZtbEFwrah2iX/2ofF6ZBGFXpENzXzeaR2xHvJ/9WcucQ0ByatEAO0hlijtxCpIOyuR/bJhIFugGUHn14hgg7Y82tpOC146fufCANMplrmcgL14eo7D2Sam/0xqF+QS2fpuNvKBiU8Wzl3EgUX3hOhrokaM+5KpwomVIw5Jht4zfmAkLe0NDoZWWybc9/ZATiMehxr4FD6pShVwWm4cnbZeuxP7cFbnez4NN1gh9WvRaglSrXtALZ6xgBnDVTK9bHYa1ZKWXLjf8bcqf7PsMPQuT+ak39zFc/SIumjSciU84uS9o2oL2U3ilBwAMQlNYTJ6QgNwhzq81Mn6Gq8Tfl6/ilIEAZ1SjtW8SQyxZUSYCjJK1b7Dgs3GxQ2LjRMShbFY1H1I0L9UatAekDjWcRc8QNwB8pJVt1Vwc2aBrWvUI6tcezs0XmBE1NPX3uHCHuY0LAJsvqyQyIVdvUc0fhXT8srhnwzzfGUKDUBcC9scat6DnqCGgUYpblLNlDPNpDAMBTuqy8/ivxdyIUKo6zzUG7QMNIJXYbs7WCSQ+LHUIrgDxiXtQk1WCi2bEVzU7QHZfpCh4/Ei2GrHcVaO7zcIKwBkmalNkVJxUCMjMxMCrkzU2IdftSKY7+wrO9fl2xNc=
+    rust: nightly
+    env: TARGET=x86_64-unknown-linux-gnu
+
+before_deploy: ci/before_deploy.bash
+
+deploy:
+  provider: releases
+  file_glob: true
+  file: pfiles/*
+  skip_cleanup: true
+  on:
+    condition: "$TRAVIS_RUST_VERSION = stable"
+    #branch: master
+    tags: true
+  api_key:
+    secure: PCRC1AYGYksGfRqUpNglgaOh2t+Jnmv/hd+K4ClScx2OQpjvFZyj1XTJsBN/Ze6VzyQR6dJH5b1g6LRSdF8qB364IOS5L4M6xFov9e1im14TrVDfGf7Dc5Qp4YvqKj+p6FcXwaLbq+AaDJeBfHVmgrI6TyjuYDmOMcaURMlzVCCeNpwkJobKji/Kua8HupYW+Tv/nviZtwhQJZ6EbjWjr65l5BdIEHpRiutjWDR14waa+Mx97ffInzoxCBtJJnU8RRz7uinxwXNF24vcJHy1eocZGJ/jt423beOGUE5NU42aSmXz3HpPquUf/WPp2Pc2SJOa0gK0ZVlu1BBxgO97lruQlQn285wFUDCX4EcrADtPHaTCCDp6YCKajBymEW6M60bKFMG/4YL4S9smYkLroy+dLUlUkBLLM+FdLRi0peYpfaJLHkga2z2/eA6xzHzqj3lrDkEfRgVa2aiJq5p3ZsBqBqKRNSVshZZr95GRmiVah5tsc5REKgOumyvhG8Fqt+MmG+ql502kT5aGhBxk3YswvzQZeUSB/8ACD2Lxc55vUE8Y9wbP4AGo59jPd6h/tC+9LDZRmKF2+20qtV5qfB4vl0JUyFtP7FComvN+I8dQSviH+PWOIvnPz2MCJs9f6xoBr4FAqqODpsMjqUTHMZYZzRufdBGp+aIBMQL2Qz0=
+
 script:
-- cargo build --all
-- cargo test --all
-- cargo doc --all
+- ci/script.bash
