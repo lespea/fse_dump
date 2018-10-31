@@ -63,12 +63,12 @@ matrix:
     rust: stable
     env:
      - TARGET=x86_64-pc-windows-msvc
-     - EXE=64
+     - EXE=64bit
   - os: windows
     rust: stable
     env:
      - TARGET=i686-pc-windows-msvc
-     - EXE=32
+     - EXE=32bit
 
   - os: linux
     rust: nightly
