@@ -47,12 +47,12 @@ matrix:
     rust: stable
     env:
     - TARGET=x86_64-unknown-linux-gnu
-    - EXE=x64-linux-gnu
+    - EXE=linux-gnu-x64
   - os: linux
     rust: stable
     env:
     - TARGET=x86_64-unknown-linux-musl
-    - EXE=x64-linux-musl
+    - EXE=linux-musl-x64
     addons:
       apt:
         packages: &musl_packages
@@ -63,7 +63,7 @@ matrix:
     rust: stable
     env:
     - TARGET=i686-unknown-linux-gnu
-    - EXE=i686-linux-gnu
+    - EXE=linux-gnu-i686
     addons:
       apt:
         packages: &i686_unknown_linux_gnu
@@ -73,7 +73,7 @@ matrix:
   #  rust: stable
   #  env:
   #  - TARGET=i686-unknown-linux-musl
-  #  - EXE=i686-linux-musl
+  #  - EXE=linux-musl-i686
   #  addons:
   #    apt:
   #      packages:
@@ -89,12 +89,12 @@ matrix:
     rust: stable
     env:
     - TARGET=x86_64-pc-windows-msvc
-    - EXE=x64
+    - EXE=windows-x64
   - os: windows
     rust: stable
     env:
     - TARGET=i686-pc-windows-msvc
-    - EXE=i686
+    - EXE=windows-i686
 
   - os: linux
     rust: nightly
