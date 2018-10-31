@@ -32,8 +32,16 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, BufWriter},
+    path::PathBuf,
     thread,
 };
+
+fn is_gz(path: &PathBuf) -> bool {
+    match path.extension() {
+        None => false,
+        Some(e) => e == "gz" || e == "gzip",
+    }
+}
 
 fn main() -> io::Result<()> {
     let opts = opts::get_opts()?;
@@ -58,9 +66,16 @@ fn main() -> io::Result<()> {
     let mut c_writer: Option<csv::Writer<Box<io::Write>>> = if let Some(ref p) = opts.csv {
         if p.to_string_lossy() == "-" {
             Some(csv::Writer::from_writer(Box::new(io::stdout())))
+        } else if is_gz(p) {
+            Some(csv::Writer::from_writer(Box::new(
+                flate2::write::GzEncoder::new(
+                    File::create(p).expect("Couldn't create the csv file"),
+                    flate2::Compression::new(3),
+                ),
+            )))
         } else {
             Some(csv::Writer::from_writer(Box::new(
-                File::create(p.clone()).expect("Couldn't create the csv file"),
+                File::create(p).expect("Couldn't create the csv file"),
             )))
         }
     } else {
@@ -70,6 +85,11 @@ fn main() -> io::Result<()> {
     let mut j_writer: Option<Box<io::Write>> = if let Some(ref p) = opts.json {
         if p.to_string_lossy() == "-" {
             Some(Box::new(io::stdout()))
+        } else if is_gz(p) {
+            Some(Box::new(flate2::write::GzEncoder::new(
+                File::create(p).expect("Couldn't create the json out file"),
+                flate2::Compression::new(3),
+            )))
         } else {
             Some(Box::new(BufWriter::new(
                 File::create(p).expect("Couldn't create the json out file"),
@@ -86,6 +106,11 @@ fn main() -> io::Result<()> {
         let t = thread::spawn(move || {
             let mut c: csv::Writer<Box<io::Write>> = if upath.to_string_lossy() == "-" {
                 csv::Writer::from_writer(Box::new(stdout.lock()))
+            } else if is_gz(&upath) {
+                csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
+                    File::create(upath).expect("Couldn't create the uniques csv file"),
+                    flate2::Compression::new(3),
+                )))
             } else {
                 csv::Writer::from_writer(Box::new(
                     File::create(upath).expect("Couldn't create the uniques csv file"),
