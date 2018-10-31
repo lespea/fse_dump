@@ -5,7 +5,7 @@ cache: cargo
 env:
   global:
     # Used on the deployment script
-    - PROJECT_NAME=bat
+    - PROJECT_NAME=fse_dump
 
 matrix:
   allow_failures:
@@ -13,7 +13,7 @@ matrix:
   - os: windows
 
   fast_finish: true
-  
+
   include:
   - rust: stable
   - rust: nightly
