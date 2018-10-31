@@ -14,7 +14,7 @@ env:
 install:
 # prevent target re-add error from rustup
 - if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = linux && $HOST != $TARGET ]]; then rustup target add $TARGET; fi
-- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = windows && $HOST != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
+- if [[ "z$TARGET" != "z" && $TRAVIS_OS_NAME = windows && $TARGET != "x86_64-pc-windows-msvc" ]]; then rustup target add $TARGET; fi
 
 matrix:
   allow_failures:
