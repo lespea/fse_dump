@@ -1,8 +1,7 @@
 /target
 *.csv
 *.json
+*.gz
 0000000*
 **/*.rs.bk
 .idea/
-/records.csv
-/records.json
