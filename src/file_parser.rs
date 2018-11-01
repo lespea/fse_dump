@@ -1,7 +1,8 @@
+use record::Record;
 use version;
 
+use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
-use channel;
 use csv;
 use flate2::read::MultiGzDecoder;
 use serde_json;
@@ -10,29 +11,24 @@ use std::{
     fs::File,
     io::{self, prelude::*, BufReader, BufWriter, ErrorKind},
     path::PathBuf,
+    sync::Arc,
 };
 
 pub struct ParseOpts<'a> {
     reader: BufReader<MultiGzDecoder<File>>,
-    buf: &'a mut Vec<u8>,
 
     csv_out: Option<csv::Writer<File>>,
     json_out: Option<BufWriter<File>>,
 
-    all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
-    all_json: &'a mut Option<Box<io::Write>>,
-    uniques: &'a Option<channel::Sender<(String, u32)>>,
+    bus: Option<&'a mut Bus<Arc<Record>>>,
 }
 
 impl<'a> ParseOpts<'a> {
     pub fn for_path(
         in_file: PathBuf,
-        buf: &'a mut Vec<u8>,
         single_csv: bool,
         single_json: bool,
-        all_csv: &'a mut Option<csv::Writer<Box<io::Write>>>,
-        all_json: &'a mut Option<Box<io::Write>>,
-        uniques: &'a Option<channel::Sender<(String, u32)>>,
+        bus: Option<&'a mut Bus<Arc<Record>>>,
     ) -> io::Result<ParseOpts<'a>> {
         let mut csv_out = None;
         let mut json_out = None;
@@ -62,14 +58,11 @@ impl<'a> ParseOpts<'a> {
 
         Ok(ParseOpts {
             reader,
-            buf,
 
             csv_out,
             json_out,
 
-            all_csv,
-            all_json,
-            uniques,
+            bus,
         })
     }
 
@@ -104,7 +97,7 @@ impl<'a> ParseOpts<'a> {
             let mut read = 12usize;
 
             loop {
-                let rec = match v.parse_record(&mut self.reader, self.buf)? {
+                let rec = match v.parse_record(&mut self.reader)? {
                     None => break,
                     Some((s, rec)) => {
                         debug!("Read {} bits", s);
@@ -117,22 +110,12 @@ impl<'a> ParseOpts<'a> {
                     c.serialize(&rec)?;
                 }
 
-                if let Some(ref mut c) = self.all_csv {
-                    c.serialize(&rec)?;
+                if let Some(ref mut c) = self.json_out {
+                    serde_json::to_writer(c, &rec)?;
                 }
 
-                if let Some(ref mut j) = self.json_out {
-                    serde_json::ser::to_writer(j.get_mut(), &rec)?;
-                    writeln!(j.get_mut())?;
-                }
-
-                if let Some(j) = self.all_json {
-                    serde_json::ser::to_writer(j.as_mut(), &rec)?;
-                    writeln!(j)?;
-                }
-
-                if let Some(u) = self.uniques {
-                    u.send((rec.path.to_string(), rec.flag));
+                if let Some(ref mut b) = self.bus {
+                    b.broadcast(Arc::new(rec));
                 }
 
                 if read >= p_len {

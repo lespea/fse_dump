@@ -15,6 +15,7 @@ homepage = "https://github.com/lespea/fse_dump"
 repository = "https://github.com/lespea/fse_dump"
 
 [dependencies]
+bus = "2"
 byteorder = "1"
 clap = "2"
 crossbeam = "0"
