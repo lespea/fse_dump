@@ -47,6 +47,8 @@ fn main() -> io::Result<()> {
     let opts = opts::get_opts()?;
     let has_std = opts.validate()?;
 
+    let g_lvl = flate2::Compression::fast();
+
     env_logger::Builder::new()
         .filter(
             None,
@@ -70,7 +72,7 @@ fn main() -> io::Result<()> {
             Some(csv::Writer::from_writer(Box::new(
                 flate2::write::GzEncoder::new(
                     File::create(p).expect("Couldn't create the csv file"),
-                    flate2::Compression::new(3),
+                    g_lvl,
                 ),
             )))
         } else {
@@ -88,7 +90,7 @@ fn main() -> io::Result<()> {
         } else if is_gz(p) {
             Some(Box::new(flate2::write::GzEncoder::new(
                 File::create(p).expect("Couldn't create the json out file"),
-                flate2::Compression::new(3),
+                g_lvl,
             )))
         } else {
             Some(Box::new(BufWriter::new(
@@ -109,7 +111,7 @@ fn main() -> io::Result<()> {
             } else if is_gz(&upath) {
                 csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
                     File::create(upath).expect("Couldn't create the uniques csv file"),
-                    flate2::Compression::new(3),
+                    g_lvl,
                 )))
             } else {
                 csv::Writer::from_writer(Box::new(
