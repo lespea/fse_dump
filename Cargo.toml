@@ -23,7 +23,7 @@ crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
 flate2 = "1"
-fnv = "1"
+hashbrown = "0"
 lazy_static = "1"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 parking_lot = "0"

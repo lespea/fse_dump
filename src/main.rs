@@ -14,7 +14,7 @@ extern crate crossbeam_channel as channel;
 extern crate csv;
 extern crate env_logger;
 extern crate flate2;
-extern crate fnv;
+extern crate hashbrown;
 extern crate parking_lot;
 extern crate serde;
 extern crate serde_json;

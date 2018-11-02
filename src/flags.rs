@@ -1,4 +1,4 @@
-use fnv::FnvHashMap;
+use hashbrown::HashMap;
 
 use std::sync::{Arc, RwLock};
 
@@ -36,8 +36,8 @@ lazy_static! {
     // Because we can't guarantee that each entry will be around forever we need to wrap it in
     // an Arc.  The map itself is behind a rwLock so we can modify the entries when we find a flag
     // that hasn't been seen before
-    static ref FLAG_MAP: RwLock<FnvHashMap<u32, Arc<String>>> = {
-        let mut m = FnvHashMap::with_capacity_and_hasher(FLAGS.len() * 3, Default::default());
+    static ref FLAG_MAP: RwLock<HashMap<u32, Arc<String>>> = {
+        let mut m = HashMap::with_capacity(FLAGS.len() * 3);
 
         for (name, num) in FLAGS.iter() {
             m.insert(*num, Arc::new((*name).to_owned()));
