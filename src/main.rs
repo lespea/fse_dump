@@ -15,6 +15,7 @@ extern crate csv;
 extern crate env_logger;
 extern crate flate2;
 extern crate fnv;
+extern crate parking_lot;
 extern crate serde;
 extern crate serde_json;
 extern crate walkdir;
@@ -37,7 +38,9 @@ use std::{
     fs::File,
     io::{self, BufWriter, Write},
     path::PathBuf,
-    sync::Arc,
+    sync::{mpsc::RecvTimeoutError, Arc},
+    thread,
+    time::Duration,
 };
 
 fn is_gz(path: &PathBuf) -> bool {
@@ -78,10 +81,8 @@ fn main() -> io::Result<()> {
 
     crossbeam::scope(|scope| {
         let mut bus: Bus<Arc<Record>> = Bus::new(1000);
-        let mut has_bus = false;
 
         if let Some(p) = csv_path {
-            has_bus = true;
             let recv = bus.add_rx();
 
             scope.spawn(|| {
@@ -106,7 +107,6 @@ fn main() -> io::Result<()> {
         };
 
         if let Some(p) = json_path {
-            has_bus = true;
             let recv = bus.add_rx();
 
             scope.spawn(|| {
@@ -132,7 +132,6 @@ fn main() -> io::Result<()> {
         };
 
         if let Some(p) = uniq_path {
-            has_bus = true;
             let recv = bus.add_rx();
 
             scope.spawn(|| {
@@ -167,23 +166,90 @@ fn main() -> io::Result<()> {
             });
         }
 
-        for f in file_paths {
-            let path = f.to_string_lossy().into_owned();
-            let parser = file_parser::ParseOpts::for_path(
-                f,
-                individual_csvs,
-                individual_jsons,
-                if has_bus { Some(&mut bus) } else { None },
-            );
+        let wait_dur = Duration::from_millis(1);
 
-            match parser {
-                Ok(mut p) => match p.parse_file() {
+        for f in file_paths {
+            let running = Arc::new(parking_lot::RwLock::new(true));
+
+            crossbeam::scope(|fscope| {
+                if individual_csvs {
+                    let f = f.clone();
+                    let mut recv = bus.add_rx();
+                    let running = running.clone();
+
+                    fscope.spawn(move || {
+                        let ext = f
+                            .extension()
+                            .map_or_else(|| "csv".to_string(), |e| format!("{:?}.csv", e));
+
+                        let mut csv_out = csv::Writer::from_path(f.with_extension(ext))
+                            .expect("Couldn't open a csv writer");
+
+                        'RUNNING: loop {
+                            match recv.recv_timeout(wait_dur) {
+                                Ok(r) => { csv_out.serialize(r) }
+                                    .expect("Couldn't write an entry into a csv"),
+                                Err(e) => match e {
+                                    RecvTimeoutError::Timeout => {
+                                        let r = running.read();
+                                        if !*r {
+                                            break 'RUNNING;
+                                        }
+                                    }
+                                    _ => return,
+                                },
+                            }
+                        }
+                    });
+                };
+
+                if individual_jsons {
+                    let f = f.clone();
+                    let mut recv = bus.add_rx();
+                    let running = running.clone();
+
+                    fscope.spawn(move || {
+                        let ext = f
+                            .extension()
+                            .map_or_else(|| "json".to_string(), |e| format!("{:?}.json", e));
+
+                        let mut json_out = BufWriter::new(
+                            File::create(f.with_extension(ext))
+                                .expect("Couldn't open a csv writer"),
+                        );
+                        'RUNNING: loop {
+                            match recv.recv_timeout(wait_dur) {
+                                Ok(r) => { serde_json::to_writer(&mut json_out, &r) }
+                                    .expect("Couldn't write an entry into a csv"),
+                                Err(e) => match e {
+                                    RecvTimeoutError::Timeout => {
+                                        let r = running.read();
+                                        if !*r {
+                                            break 'RUNNING;
+                                        }
+                                        thread::yield_now();
+                                    }
+                                    _ => return,
+                                },
+                            }
+                        }
+                    });
+                };
+
+                if individual_jsons {};
+
+                let path = f.to_string_lossy().into_owned();
+
+                match file_parser::parse_file(f, &mut bus) {
                     Ok(_) => info!("Finished parsing {}", path),
                     Err(e) => error!("Couldn't parse '{}': {}", path, e),
-                },
+                };
 
-                Err(e) => error!("Couldn't construct a parser for '{:?}': {}", path, e),
-            };
+                {
+                    let mut r = running.write();
+                    *r = false;
+                }
+            })
         }
     });
 
