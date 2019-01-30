@@ -1,7 +1,7 @@
 use structopt::StructOpt;
 use walkdir;
 
-use io::{self, ErrorKind};
+use crate::io::{self, ErrorKind};
 use std::{ffi::OsStr, path::PathBuf};
 
 #[derive(Debug, StructOpt)]

@@ -1,5 +1,5 @@
-use record::Record;
-use version;
+use crate::record::Record;
+use crate::version;
 
 use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};

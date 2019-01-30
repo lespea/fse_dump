@@ -1,5 +1,5 @@
-use flags;
-use record::Record;
+use crate::flags;
+use crate::record::Record;
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 

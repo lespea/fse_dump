@@ -26,7 +26,7 @@ mod record;
 mod uniques;
 mod version;
 
-use record::Record;
+use crate::record::Record;
 
 use bus::Bus;
 use env_logger::{Target, WriteStyle};

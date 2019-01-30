@@ -1,4 +1,4 @@
-use flags as f;
+use crate::flags as f;
 
 use std::sync::Arc;
 
