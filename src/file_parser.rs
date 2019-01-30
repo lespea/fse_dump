@@ -33,7 +33,7 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Unsupported type",
-                ))
+                ));
             }
         };
 

@@ -4,7 +4,6 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
-#[macro_use]
 extern crate structopt;
 
 extern crate bus;
@@ -85,7 +84,7 @@ fn main() -> io::Result<()> {
         if let Some(p) = csv_path {
             let recv = bus.add_rx();
 
-            scope.spawn(|| {
+            scope.spawn(|_| {
                 let sout = io::stdout();
                 let mut writer: csv::Writer<Box<Write>> = if p.to_string_lossy() == "-" {
                     csv::Writer::from_writer(Box::new(sout.lock()))
@@ -109,7 +108,7 @@ fn main() -> io::Result<()> {
         if let Some(p) = json_path {
             let recv = bus.add_rx();
 
-            scope.spawn(|| {
+            scope.spawn(|_| {
                 let sout = io::stdout();
                 let mut writer: Box<Write> = if p.to_string_lossy() == "-" {
                     Box::new(sout.lock())
@@ -134,7 +133,7 @@ fn main() -> io::Result<()> {
         if let Some(p) = uniq_path {
             let recv = bus.add_rx();
 
-            scope.spawn(|| {
+            scope.spawn(|_| {
                 let sout = io::stdout();
                 let mut c: csv::Writer<Box<io::Write>> = if p.to_string_lossy() == "-" {
                     csv::Writer::from_writer(Box::new(sout.lock()))
@@ -177,7 +176,7 @@ fn main() -> io::Result<()> {
                     let mut recv = bus.add_rx();
                     let running = running.clone();
 
-                    fscope.spawn(move || {
+                    fscope.spawn(move |_| {
                         let ext = f
                             .extension()
                             .map_or_else(|| "csv".to_string(), |e| format!("{:?}.csv", e));
@@ -208,7 +207,7 @@ fn main() -> io::Result<()> {
                     let mut recv = bus.add_rx();
                     let running = running.clone();
 
-                    fscope.spawn(move || {
+                    fscope.spawn(move |_| {
                         let ext = f
                             .extension()
                             .map_or_else(|| "json".to_string(), |e| format!("{:?}.json", e));
@@ -250,8 +249,10 @@ fn main() -> io::Result<()> {
                     *r = false;
                 }
             })
+            .expect("Couldn't close all the threads");
         }
-    });
+    })
+    .expect("Couldn't close all the threads");
 
     Ok(())
 }
