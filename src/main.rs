@@ -4,20 +4,6 @@ extern crate lazy_static;
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
-extern crate structopt;
-
-extern crate bus;
-extern crate byteorder;
-extern crate crossbeam;
-extern crate crossbeam_channel as channel;
-extern crate csv;
-extern crate env_logger;
-extern crate flate2;
-extern crate hashbrown;
-extern crate parking_lot;
-extern crate serde;
-extern crate serde_json;
-extern crate walkdir;
 
 mod file_parser;
 mod flags;
@@ -27,11 +13,14 @@ mod uniques;
 mod version;
 
 use crate::record::Record;
-
 use bus::Bus;
-use env_logger::{Target, WriteStyle};
-
+use crossbeam;
+use csv;
+use env_logger::{self, Target, WriteStyle};
+use flate2;
 use log::LevelFilter;
+use parking_lot;
+use serde_json;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -41,6 +30,7 @@ use std::{
     thread,
     time::Duration,
 };
+use structopt;
 
 fn is_gz(path: &PathBuf) -> bool {
     match path.extension() {
@@ -86,7 +76,7 @@ fn main() -> io::Result<()> {
 
             scope.spawn(|_| {
                 let sout = io::stdout();
-                let mut writer: csv::Writer<Box<Write>> = if p.to_string_lossy() == "-" {
+                let mut writer: csv::Writer<Box<dyn Write>> = if p.to_string_lossy() == "-" {
                     csv::Writer::from_writer(Box::new(sout.lock()))
                 } else if is_gz(&p) {
                     csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
@@ -110,7 +100,7 @@ fn main() -> io::Result<()> {
 
             scope.spawn(|_| {
                 let sout = io::stdout();
-                let mut writer: Box<Write> = if p.to_string_lossy() == "-" {
+                let mut writer: Box<dyn Write> = if p.to_string_lossy() == "-" {
                     Box::new(sout.lock())
                 } else if is_gz(&p) {
                     Box::new(flate2::write::GzEncoder::new(
@@ -135,7 +125,7 @@ fn main() -> io::Result<()> {
 
             scope.spawn(|_| {
                 let sout = io::stdout();
-                let mut c: csv::Writer<Box<io::Write>> = if p.to_string_lossy() == "-" {
+                let mut c: csv::Writer<Box<dyn io::Write>> = if p.to_string_lossy() == "-" {
                     csv::Writer::from_writer(Box::new(sout.lock()))
                 } else if is_gz(&p) {
                     csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(

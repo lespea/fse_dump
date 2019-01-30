@@ -1,5 +1,4 @@
 use hashbrown::HashMap;
-
 use std::sync::{Arc, RwLock};
 
 const FLAG_SEP: &str = " | ";

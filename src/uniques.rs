@@ -1,5 +1,4 @@
 use crate::flags as f;
-
 use std::sync::Arc;
 
 #[derive(Debug, Default, PartialEq)]

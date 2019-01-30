@@ -1,8 +1,5 @@
-use crate::flags;
-use crate::record::Record;
-
+use crate::{flags, record::Record};
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
-
 use std::io::{self, prelude::*};
 
 const V1_BYTES: &[u8; 4] = b"1SLD";
@@ -23,7 +20,7 @@ trait RecordParser {
     const HAS_NODEID: bool;
 
     #[inline]
-    fn parse_record(&self, reader: &mut BufRead) -> io::Result<Option<(usize, Record)>> {
+    fn parse_record(&self, reader: &mut dyn BufRead) -> io::Result<Option<(usize, Record)>> {
         let mut sbuf = Vec::with_capacity(1000);
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
@@ -81,7 +78,7 @@ impl RecordParser for V2 {
 
 impl Version {
     #[inline]
-    pub fn from_reader(reader: &mut BufRead) -> io::Result<Option<Version>> {
+    pub fn from_reader(reader: &mut dyn BufRead) -> io::Result<Option<Version>> {
         let mut b = [0u8; 4];
         reader.read_exact(&mut b)?;
         match &b {
@@ -92,7 +89,7 @@ impl Version {
     }
 
     #[inline]
-    pub fn parse_record(&self, reader: &mut BufRead) -> io::Result<Option<(usize, Record)>> {
+    pub fn parse_record(&self, reader: &mut dyn BufRead) -> io::Result<Option<(usize, Record)>> {
         match self {
             Version::Ver1(v) => v.parse_record(reader),
             Version::Ver2(v) => v.parse_record(reader),

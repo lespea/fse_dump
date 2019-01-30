@@ -1,10 +1,7 @@
-use crate::record::Record;
-use crate::version;
-
+use crate::{record::Record, version};
 use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
 use flate2::read::MultiGzDecoder;
-
 use std::{
     fs::File,
     io::{self, prelude::*, BufReader, ErrorKind},
