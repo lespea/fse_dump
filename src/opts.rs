@@ -44,7 +44,7 @@ pub struct Opts {
     pub files: Vec<PathBuf>,
 
     /// The level we should compress the output as; 0-9
-    #[structopt(short = "l", long = "level", default_value="7")]
+    #[structopt(short = "l", long = "level", default_value = "7")]
     pub level: u32,
 }
 
