@@ -4,6 +4,10 @@ activity that occurred for a particular volume. They can be found on devices run
 devices that were plugged in to a device running macOS. *fse_dump* can be used to parse FSEvents
 files from the '/.fseventsd/' on a live system or FSEvents files extracted from an image.
 
+
+[![Build status](https://travis-ci.org/lespea/fse_dump.svg)](https://travis-ci.org/lespea/fse_dump)
+[![Crates.io](https://img.shields.io/crates/v/fse_dump.svg)](https://crates.io/crates/fse_dump)
+
 ## Usage
 ```
 USAGE:
