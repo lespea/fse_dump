@@ -42,6 +42,9 @@ walkdir = "2"
 [patch.crates-io]
 miniz_oxide = { git = 'https://github.com/Frommi/miniz_oxide', rev = 'e8d2a584c57b60594707903adeef72ea6659bda9' }
 
+[profile.dev]
+opt-level = 1
+
 [profile.release]
 codegen-units = 1
 incremental = false
