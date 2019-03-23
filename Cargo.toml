@@ -9,7 +9,7 @@ authors = ["Adam Lesperance <lespea@gmail.com>"]
 categories = ["parsing", "command-line-utilities"]
 keywords = ["mac", "fseventsd", "security", "forensics"]
 
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 
 homepage = "https://github.com/lespea/fse_dump"
