@@ -42,6 +42,10 @@ pub struct Opts {
     /// that has a filename consisting solely of hex chars will be considered a file to parse
     #[structopt(parse(from_os_str), raw(required = "true", min_values = "1"))]
     pub files: Vec<PathBuf>,
+
+    /// The level we should compress the output as; 0-9
+    #[structopt(short = "l", long = "level", default_value="7")]
+    pub level: u32,
 }
 
 fn stdout_path(path: &Option<PathBuf>) -> bool {
@@ -54,6 +58,13 @@ fn stdout_path(path: &Option<PathBuf>) -> bool {
 
 impl Opts {
     pub fn validate(&self) -> io::Result<(bool)> {
+        if self.level > 9 {
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
+                "The compression level must be between 0 and 9 (inclusive)",
+            ));
+        }
+
         let mut counts = 0;
         if stdout_path(&self.csv) {
             counts += 1

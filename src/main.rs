@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
         .target(Target::Stderr)
         .init();
 
-    let g_lvl = flate2::Compression::fast();
+    let g_lvl = flate2::Compression::new(opts.level);
 
     crossbeam::scope(|scope| {
         let mut bus: Bus<Arc<Record>> = Bus::new(1000);
