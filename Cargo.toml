@@ -27,7 +27,7 @@ crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
-flate2 = { version = "1.0", features = ["rust_backend"], default-features = false }
+flate2 = "1.0"
 hashbrown = "0"
 lazy_static = "1"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
@@ -37,10 +37,6 @@ serde_derive = "1"
 serde_json = "1"
 structopt = "0"
 walkdir = "2"
-
-# Use crc32fast -- change committed but not pushed to crates yet
-[patch.crates-io]
-miniz_oxide = { git = 'https://github.com/Frommi/miniz_oxide', rev = 'e8d2a584c57b60594707903adeef72ea6659bda9' }
 
 [profile.dev]
 opt-level = 1
