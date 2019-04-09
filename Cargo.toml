@@ -6,7 +6,7 @@ version = "0.4.1"
 edition = "2018"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
-categories = ["parsing", "command-line-utilities"]
+categories = ["os::macos-apis", "command-line-utilities"]
 keywords = ["mac", "fseventsd", "security", "forensics"]
 
 license = "MIT OR Apache-2.0"
