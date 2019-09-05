@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use walkdir;
 
 #[derive(Debug, StructOpt)]
-#[structopt()]
+#[structopt(author, about)]
 pub struct Opts {
     /// If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
     #[structopt(long = "csvs")]
@@ -40,7 +40,7 @@ pub struct Opts {
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
     /// that has a filename consisting solely of hex chars will be considered a file to parse
-    #[structopt(parse(from_os_str), raw(required = "true", min_values = "1"))]
+    #[structopt(parse(from_os_str), required = true, min_values = 1)]
     pub files: Vec<PathBuf>,
 
     /// The level we should compress the output as; 0-9

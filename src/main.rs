@@ -30,7 +30,6 @@ use std::{
     thread,
     time::Duration,
 };
-use structopt;
 
 fn is_gz(path: &PathBuf) -> bool {
     match path.extension() {
