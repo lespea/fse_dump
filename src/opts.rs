@@ -57,7 +57,7 @@ fn stdout_path(path: &Option<PathBuf>) -> bool {
 }
 
 impl Opts {
-    pub fn validate(&self) -> io::Result<(bool)> {
+    pub fn validate(&self) -> io::Result<bool> {
         if self.level > 9 {
             return Err(io::Error::new(
                 ErrorKind::InvalidInput,
