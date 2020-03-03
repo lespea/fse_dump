@@ -1,3 +1,5 @@
+#![warn(rust_2018_idioms)]
+
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
@@ -13,9 +15,9 @@ mod uniques;
 mod version;
 
 use crate::record::Record;
-use bus::Bus;
+use bus::{Bus, BusReader};
 use crossbeam;
-use csv;
+use csv::{self, Writer};
 use env_logger::{self, Target, WriteStyle};
 use flate2;
 use log::LevelFilter;
@@ -35,6 +37,43 @@ fn is_gz(path: &PathBuf) -> bool {
     match path.extension() {
         None => false,
         Some(e) => e == "gz" || e == "gzip",
+    }
+}
+
+fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>)
+where
+    I: Write,
+{
+    for rec in recv {
+        writer.serialize(rec).expect("Couldn't write to global csv");
+    }
+}
+
+fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I)
+where
+    I: Write,
+{
+    for rec in recv {
+        serde_json::to_writer(&mut writer, &rec).expect("Couldn't write to global json");
+    }
+}
+
+fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>)
+where
+    I: Write,
+{
+    let mut u = BTreeMap::new();
+
+    for rec in recv {
+        u.entry(rec.path.clone())
+            .or_insert_with(uniques::UniqueCounts::default)
+            .update(rec.flag);
+    }
+
+    for (path, v) in u {
+        writer
+            .serialize(v.into_unique_out(path))
+            .expect("Error writing the uniques");
     }
 }
 
@@ -74,23 +113,24 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                let sout = io::stdout();
-                let mut writer: csv::Writer<Box<dyn Write>> = if p.to_string_lossy() == "-" {
-                    csv::Writer::from_writer(Box::new(sout.lock()))
+                if p.to_string_lossy() == "-" {
+                    csv_write(recv, csv::Writer::from_writer(io::stdout().lock()));
                 } else if is_gz(&p) {
-                    csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
-                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
-                        g_lvl,
-                    )))
+                    csv_write(
+                        recv,
+                        csv::Writer::from_writer(flate2::write::GzEncoder::new(
+                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                            g_lvl,
+                        )),
+                    );
                 } else {
-                    csv::Writer::from_writer(Box::new(BufWriter::new(
-                        File::create(p).expect("Couldn't create the csv file"),
-                    )))
+                    csv_write(
+                        recv,
+                        csv::Writer::from_writer(BufWriter::new(
+                            File::create(p).expect("Couldn't create the csv file"),
+                        )),
+                    );
                 };
-
-                for rec in recv {
-                    writer.serialize(rec).expect("Couldn't write to global csv");
-                }
             });
         };
 
@@ -98,24 +138,22 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                let sout = io::stdout();
-                let mut writer: Box<dyn Write> = if p.to_string_lossy() == "-" {
-                    Box::new(sout.lock())
+                if p.to_string_lossy() == "-" {
+                    json_write(recv, io::stdout().lock())
                 } else if is_gz(&p) {
-                    Box::new(flate2::write::GzEncoder::new(
-                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
-                        g_lvl,
-                    ))
+                    json_write(
+                        recv,
+                        flate2::write::GzEncoder::new(
+                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                            g_lvl,
+                        ),
+                    );
                 } else {
-                    Box::new(BufWriter::new(
-                        File::create(p).expect("Couldn't create the csv file"),
-                    ))
+                    json_write(
+                        recv,
+                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                    );
                 };
-
-                for rec in recv {
-                    serde_json::to_writer(&mut writer, &rec)
-                        .expect("Couldn't write to global json");
-                }
             });
         };
 
@@ -123,34 +161,29 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                let sout = io::stdout();
-                let mut c: csv::Writer<Box<dyn io::Write>> = if p.to_string_lossy() == "-" {
-                    csv::Writer::from_writer(Box::new(sout.lock()))
+                if p.to_string_lossy() == "-" {
+                    write_uniqs(
+                        recv,
+                        csv::Writer::from_writer(Box::new(io::stdout().lock())),
+                    );
                 } else if is_gz(&p) {
-                    csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
-                        BufWriter::new(
-                            File::create(p).expect("Couldn't create the uniques csv file"),
-                        ),
-                        g_lvl,
-                    )))
+                    write_uniqs(
+                        recv,
+                        csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
+                            BufWriter::new(
+                                File::create(p).expect("Couldn't create the uniques csv file"),
+                            ),
+                            g_lvl,
+                        ))),
+                    );
                 } else {
-                    csv::Writer::from_writer(Box::new(BufWriter::new(
-                        File::create(p).expect("Couldn't create the uniques csv file"),
-                    )))
+                    write_uniqs(
+                        recv,
+                        csv::Writer::from_writer(Box::new(BufWriter::new(
+                            File::create(p).expect("Couldn't create the uniques csv file"),
+                        ))),
+                    );
                 };
-
-                let mut u = BTreeMap::new();
-
-                for rec in recv {
-                    u.entry(rec.path.clone())
-                        .or_insert_with(uniques::UniqueCounts::default)
-                        .update(rec.flag);
-                }
-
-                for (path, v) in u {
-                    c.serialize(v.into_unique_out(path))
-                        .expect("Error writing the uniques");
-                }
             });
         }
 

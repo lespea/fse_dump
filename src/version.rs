@@ -7,6 +7,7 @@ const V2_BYTES: &[u8; 4] = b"2SLD";
 
 #[derive(Debug, PartialEq)]
 pub struct V1;
+
 #[derive(Debug, PartialEq)]
 pub struct V2;
 
@@ -16,11 +17,14 @@ pub enum Version {
     Ver2(V2),
 }
 
-trait RecordParser {
+trait RecordParser<I>
+where
+    I: BufRead,
+{
     const HAS_NODEID: bool;
 
     #[inline]
-    fn parse_record(&self, reader: &mut dyn BufRead) -> io::Result<Option<(usize, Record)>> {
+    fn parse_record(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>> {
         let mut sbuf = Vec::with_capacity(1000);
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
@@ -68,17 +72,26 @@ trait RecordParser {
     }
 }
 
-impl RecordParser for V1 {
+impl<I> RecordParser<I> for V1
+where
+    I: BufRead,
+{
     const HAS_NODEID: bool = false;
 }
 
-impl RecordParser for V2 {
+impl<I> RecordParser<I> for V2
+where
+    I: BufRead,
+{
     const HAS_NODEID: bool = true;
 }
 
 impl Version {
     #[inline]
-    pub fn from_reader(reader: &mut dyn BufRead) -> io::Result<Option<Version>> {
+    pub fn from_reader<I>(reader: &mut I) -> io::Result<Option<Version>>
+    where
+        I: BufRead,
+    {
         let mut b = [0u8; 4];
         reader.read_exact(&mut b)?;
         match &b {
@@ -89,7 +102,10 @@ impl Version {
     }
 
     #[inline]
-    pub fn parse_record(&self, reader: &mut dyn BufRead) -> io::Result<Option<(usize, Record)>> {
+    pub fn parse_record<I>(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>>
+    where
+        I: BufRead,
+    {
         match self {
             Version::Ver1(v) => v.parse_record(reader),
             Version::Ver2(v) => v.parse_record(reader),
