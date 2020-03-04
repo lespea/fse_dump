@@ -55,6 +55,7 @@ where
 {
     for rec in recv {
         serde_json::to_writer(&mut writer, &rec).expect("Couldn't write to global json");
+        writeln!(writer).expect("Couldn't write to global json");
     }
 }
 
