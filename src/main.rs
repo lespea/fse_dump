@@ -27,7 +27,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, BufWriter, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{mpsc::RecvTimeoutError, Arc},
     thread,
     time::Duration,
@@ -77,6 +77,10 @@ where
     }
 }
 
+fn path_stdout(p: &Path) -> bool {
+    p.as_os_str() == "-"
+}
+
 fn main() -> io::Result<()> {
     let opts = opts::get_opts()?;
     let has_std = opts.validate()?;
@@ -113,7 +117,7 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                if p.to_string_lossy() == "-" {
+                if path_stdout(&p) {
                     csv_write(recv, csv::Writer::from_writer(io::stdout().lock()));
                 } else if is_gz(&p) {
                     csv_write(
@@ -138,7 +142,7 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                if p.to_string_lossy() == "-" {
+                if path_stdout(&p) {
                     json_write(recv, io::stdout().lock())
                 } else if is_gz(&p) {
                     json_write(
@@ -161,7 +165,7 @@ fn main() -> io::Result<()> {
             let recv = bus.add_rx();
 
             scope.spawn(|_| {
-                if p.to_string_lossy() == "-" {
+                if path_stdout(&p) {
                     write_uniqs(recv, csv::Writer::from_writer(io::stdout().lock()));
                 } else if is_gz(&p) {
                     write_uniqs(
