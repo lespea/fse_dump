@@ -162,26 +162,23 @@ fn main() -> io::Result<()> {
 
             scope.spawn(|_| {
                 if p.to_string_lossy() == "-" {
-                    write_uniqs(
-                        recv,
-                        csv::Writer::from_writer(Box::new(io::stdout().lock())),
-                    );
+                    write_uniqs(recv, csv::Writer::from_writer(io::stdout().lock()));
                 } else if is_gz(&p) {
                     write_uniqs(
                         recv,
-                        csv::Writer::from_writer(Box::new(flate2::write::GzEncoder::new(
+                        csv::Writer::from_writer(flate2::write::GzEncoder::new(
                             BufWriter::new(
                                 File::create(p).expect("Couldn't create the uniques csv file"),
                             ),
                             g_lvl,
-                        ))),
+                        )),
                     );
                 } else {
                     write_uniqs(
                         recv,
-                        csv::Writer::from_writer(Box::new(BufWriter::new(
+                        csv::Writer::from_writer(BufWriter::new(
                             File::create(p).expect("Couldn't create the uniques csv file"),
-                        ))),
+                        )),
                     );
                 };
             });
