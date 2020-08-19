@@ -7,22 +7,6 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
-mod file_parser;
-mod flags;
-mod opts;
-mod record;
-mod uniques;
-mod version;
-
-use crate::record::Record;
-use bus::{Bus, BusReader};
-use crossbeam;
-use csv::{self, Writer};
-use env_logger::{self, Target, WriteStyle};
-use flate2;
-use log::LevelFilter;
-use parking_lot;
-use serde_json;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -32,6 +16,20 @@ use std::{
     thread,
     time::Duration,
 };
+
+use bus::{Bus, BusReader};
+use csv::{self, Writer};
+use env_logger::{self, Target, WriteStyle};
+use log::LevelFilter;
+
+use crate::record::Record;
+
+mod file_parser;
+mod flags;
+mod opts;
+mod record;
+mod uniques;
+mod version;
 
 fn is_gz(path: &PathBuf) -> bool {
     match path.extension() {

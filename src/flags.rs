@@ -1,5 +1,6 @@
-use hashbrown::HashMap;
 use std::sync::{Arc, RwLock};
+
+use hashbrown::HashMap;
 
 const FLAG_SEP: &str = " | ";
 
@@ -67,13 +68,13 @@ fn bits_to_str(bits: u32) -> String {
 
     // Since these are long lived we might as well shrink this down to what's needed
     s.shrink_to_fit();
-    debug!(target:"flags", "Bits {} == {}", bits, s);
+    debug!(target: "flags", "Bits {} == {}", bits, s);
     s
 }
 
 /// Given the bits, return a string representing the flags that are set
 pub fn parse_bits(bits: u32) -> Arc<String> {
-    debug!(target:"flags", "Translating the bits {}", bits);
+    debug!(target: "flags", "Translating the bits {}", bits);
     let ans = {
         FLAG_MAP
             .read()
@@ -83,7 +84,7 @@ pub fn parse_bits(bits: u32) -> Arc<String> {
     };
 
     ans.unwrap_or_else(|| {
-        debug!(target:"flags", "Trying lock");
+        debug!(target: "flags", "Trying lock");
         FLAG_MAP
             .write()
             .expect("Couldn't lock the lookup map?")
@@ -98,9 +99,9 @@ pub fn parse_bits(bits: u32) -> Arc<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use env_logger;
+
+    use super::*;
 
     #[test]
     fn simple_bits_to_strs() {

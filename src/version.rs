@@ -1,6 +1,8 @@
-use crate::{flags, record::Record};
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 use std::io::{self, prelude::*};
+
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+
+use crate::{flags, record::Record};
 
 const V1_BYTES: &[u8; 4] = b"1SLD";
 const V2_BYTES: &[u8; 4] = b"2SLD";

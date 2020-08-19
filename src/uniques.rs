@@ -1,5 +1,6 @@
-use crate::flags as f;
 use std::sync::Arc;
+
+use crate::flags as f;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct UniqueCounts {

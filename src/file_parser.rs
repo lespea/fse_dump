@@ -1,13 +1,15 @@
-use crate::{record::Record, version};
-use bus::Bus;
-use byteorder::{LittleEndian, ReadBytesExt};
-use flate2::read::MultiGzDecoder;
 use std::{
     fs::File,
     io::{self, prelude::*, BufReader, ErrorKind},
     path::PathBuf,
     sync::Arc,
 };
+
+use bus::Bus;
+use byteorder::{LittleEndian, ReadBytesExt};
+use flate2::read::MultiGzDecoder;
+
+use crate::{record::Record, version};
 
 pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()> {
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
