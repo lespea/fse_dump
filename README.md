@@ -42,7 +42,7 @@ ARGS:
 ```
 
 ## References
-* https://www.sans.org/summit-archives/file/summit-archive-1498158287.pdf
+* http://nicoleibrahim.com/apple-fsevents-forensics/
 * https://github.com/dlcowen/FSEventsParser
 
 ## License
