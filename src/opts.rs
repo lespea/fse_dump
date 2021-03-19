@@ -101,10 +101,9 @@ impl Opts {
 
     #[inline]
     fn want_filename(str: &OsStr) -> bool {
-        str.to_string_lossy().chars().all(|c| match c {
-            'a'..='f' | 'A'..='F' | '0'..='9' => true,
-            _ => false,
-        })
+        str.to_string_lossy()
+            .chars()
+            .all(|c| matches!(c, 'a'..='f' | 'A'..='F' | '0'..='9'))
     }
 
     pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {

@@ -31,7 +31,7 @@ mod record;
 mod uniques;
 mod version;
 
-fn is_gz(path: &PathBuf) -> bool {
+fn is_gz(path: &Path) -> bool {
     match path.extension() {
         None => false,
         Some(e) => e == "gz" || e == "gzip",
