@@ -2,8 +2,8 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "1.0.11"
-edition = "2018"
+version = "1.1.0"
+edition = "2021"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
 categories = ["os::macos-apis", "command-line-utilities"]
