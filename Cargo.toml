@@ -22,7 +22,7 @@ travis-ci = { repository = "lespea/fse_dump" }
 [dependencies]
 bus = "2"
 byteorder = "1"
-clap = "2"
+clap = "3"
 crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
