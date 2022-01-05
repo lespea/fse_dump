@@ -1,6 +1,6 @@
 use std::{ffi::OsStr, path::PathBuf};
 
-use structopt::StructOpt;
+use clap::StructOpt;
 
 use crate::io::{self, ErrorKind};
 
@@ -21,7 +21,7 @@ pub struct Opts {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[structopt(short = "c", long = "csv", parse(from_os_str))]
+    #[structopt(short = 'c', long = "csv", parse(from_os_str))]
     pub csv: Option<PathBuf>,
 
     /// If we should dump the combined records into a single json.
@@ -30,13 +30,13 @@ pub struct Opts {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[structopt(short = "j", long = "json", parse(from_os_str))]
+    #[structopt(short = 'j', long = "json", parse(from_os_str))]
     pub json: Option<PathBuf>,
 
     /// If we should dump the unique paths/operations found into a csv
     ///
     /// We'll combine all of the operations for each path so there is one entry per path
-    #[structopt(short = "u", long = "unique", parse(from_os_str))]
+    #[structopt(short = 'u', long = "unique", parse(from_os_str))]
     pub uniques: Option<PathBuf>,
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
@@ -45,7 +45,7 @@ pub struct Opts {
     pub files: Vec<PathBuf>,
 
     /// The level we should compress the output as; 0-9
-    #[structopt(short = "l", long = "level", default_value = "7")]
+    #[structopt(short = 'l', long = "level", default_value = "7")]
     pub level: u32,
 }
 
@@ -137,5 +137,5 @@ impl Opts {
 }
 
 pub fn get_opts() -> io::Result<Opts> {
-    Ok(Opts::from_args())
+    Ok(Opts::parse())
 }

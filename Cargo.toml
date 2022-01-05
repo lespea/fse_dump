@@ -22,7 +22,7 @@ travis-ci = { repository = "lespea/fse_dump" }
 [dependencies]
 bus = "2"
 byteorder = "1"
-clap = "2"
+clap = { version = "3", features = ["derive"] }
 crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
@@ -35,7 +35,6 @@ parking_lot = "0"
 serde = { version = "1", features = ["rc"] }
 serde_derive = "1"
 serde_json = "1"
-structopt = "0"
 walkdir = "2"
 
 [profile.dev]
