@@ -34,7 +34,8 @@ jobs:
       - uses: actions-rs/cargo@v1
         name: clippy
         with:
-          command: clippy -q
+          command: clippy
+          args: -q
 
       - uses: actions-rs/cargo@v1
         name: test
@@ -44,4 +45,5 @@ jobs:
       - uses: actions-rs/cargo@v1
         name: fmt
         with:
-          command: fmt -q
+          command: fmt
+          args: -q
