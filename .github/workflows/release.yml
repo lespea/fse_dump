@@ -57,9 +57,9 @@ jobs:
           args: -q
 
       - uses: actions-rs/cargo@v1
-        name: fmt
+        name: release
         with:
-          command: release
+          command: build
           args: --verbose --release
 
       - uses: svenstaro/upload-release-action@v2
