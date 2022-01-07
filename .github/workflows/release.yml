@@ -1,4 +1,4 @@
-name: CI
+name: Release
 
 on:
   push:
@@ -68,4 +68,4 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref }}
           file: target/release/fse_dump${{ matrix.ext }}
-          asset_name: fse_dump-${{ github.ref }}${{ matrix.oname }}${{ matrix.ext }}
+          asset_name: fse_dump-${{ github.ref_name }}${{ matrix.oname }}${{ matrix.ext }}
