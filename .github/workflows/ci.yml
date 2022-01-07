@@ -9,6 +9,14 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
     steps:
       - uses: actions/checkout@v2
         name: checkout
@@ -19,6 +27,9 @@ jobs:
         name: setup rust
         with:
           toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+          components: rustfmt, clippy
 
       - uses: actions-rs/cargo@v1
         name: clippy
