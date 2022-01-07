@@ -5,6 +5,8 @@ devices that were plugged in to a device running macOS. *fse_dump* can be used t
 files from the '/.fseventsd/' on a live system or FSEvents files extracted from an image.
 
 
+![Github CI](https://github.com/lespea/fse_dump/actions/workflows/ci.yml/badge.svg)
+![Github Release](https://github.com/lespea/fse_dump/actions/workflows/release.yml/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/fse_dump.svg)](https://crates.io/crates/fse_dump)
 
 ## Usage
