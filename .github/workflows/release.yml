@@ -54,7 +54,7 @@ jobs:
         name: fmt
         with:
           command: fmt
-          args: -q --release
+          args: -q
 
       - uses: actions-rs/cargo@v1
         name: fmt
