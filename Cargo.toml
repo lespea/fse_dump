@@ -17,7 +17,6 @@ repository = "https://github.com/lespea/fse_dump"
 
 [badges]
 maintenance = { status = "actively-developed" }
-travis-ci = { repository = "lespea/fse_dump" }
 
 [dependencies]
 bus = "2"
