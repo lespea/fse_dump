@@ -23,6 +23,10 @@ jobs:
             target: x86_64-apple-darwin
             ext: ""
             oname: "-darwin"
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            ext: ""
+            oname: "-darwin_arm64"
 
     steps:
       - uses: actions/checkout@v2
