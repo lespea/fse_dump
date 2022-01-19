@@ -8,7 +8,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -16,6 +15,8 @@ jobs:
             target: x86_64-unknown-linux-musl
           - os: macos-latest
             target: x86_64-apple-darwin
+          - os: macos-latest
+            target: arch64-apple-darwin
 
     steps:
       - uses: actions/checkout@v2
