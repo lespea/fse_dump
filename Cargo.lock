@@ -169,7 +169,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ae5588f6b3c3cb05239e90bd110f257254aecd01e4635400391aeae07497845"
 dependencies = [
  "cfg-if 1.0.0",
- "crossbeam-channel 0.5.3",
+ "crossbeam-channel 0.5.4",
  "crossbeam-deque",
  "crossbeam-epoch",
  "crossbeam-queue",
@@ -188,9 +188,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-channel"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdbfe11fe19ff083c48923cf179540e8cd0535903dc35e178a1fdeeb59aef51f"
+checksum = "5aaa7bd5fb665c6864b5f963dd9097905c54125909c7aa94c9e18507cdbe6c53"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils 0.8.8",
@@ -308,7 +308,7 @@ dependencies = [
  "byteorder",
  "clap",
  "crossbeam",
- "crossbeam-channel 0.5.3",
+ "crossbeam-channel 0.5.4",
  "csv",
  "env_logger",
  "flate2",
