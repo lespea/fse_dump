@@ -2,7 +2,7 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "1.2.2"
+version = "1.3.0"
 edition = "2021"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
@@ -26,7 +26,7 @@ crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
-flate2 = { version = "1.0", features = ["zlib-ng-compat"], default-features = false }
+flate2 = { version = "1.0", features = ["zlib-ng"], default-features = false }
 hashbrown = "0"
 lazy_static = "1"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
