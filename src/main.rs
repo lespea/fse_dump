@@ -1,4 +1,5 @@
 #![warn(rust_2018_idioms)]
+#![deny(warnings)]
 
 #[macro_use]
 extern crate lazy_static;
