@@ -191,7 +191,7 @@ fn main() -> io::Result<()> {
         let wait_dur = Duration::from_millis(1);
 
         for f in file_paths {
-            let running = Arc::new(parking_lot::RwLock::new(true));
+            let running = Arc::new(std::sync::RwLock::new(true));
 
             crossbeam::scope(|fscope| {
                 if individual_csvs {
@@ -213,7 +213,7 @@ fn main() -> io::Result<()> {
                                     .expect("Couldn't write an entry into a csv"),
                                 Err(e) => match e {
                                     RecvTimeoutError::Timeout => {
-                                        let r = running.read();
+                                        let r = running.read().unwrap();
                                         if !*r {
                                             break 'RUNNING;
                                         }
@@ -245,7 +245,7 @@ fn main() -> io::Result<()> {
                                     .expect("Couldn't write an entry into a csv"),
                                 Err(e) => match e {
                                     RecvTimeoutError::Timeout => {
-                                        let r = running.read();
+                                        let r = running.read().unwrap();
                                         if !*r {
                                             break 'RUNNING;
                                         }
@@ -268,7 +268,7 @@ fn main() -> io::Result<()> {
                 };
 
                 {
-                    let mut r = running.write();
+                    let mut r = running.write().unwrap();
                     *r = false;
                 }
             })
