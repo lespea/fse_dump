@@ -7,13 +7,13 @@ use crate::{flags, record::Record};
 const V1_BYTES: &[u8; 4] = b"1SLD";
 const V2_BYTES: &[u8; 4] = b"2SLD";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct V1;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct V2;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Version {
     Ver1(V1),
     Ver2(V2),

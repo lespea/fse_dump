@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::flags as f;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub struct UniqueCounts {
     counts: u64,
     flags: u32,
