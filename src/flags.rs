@@ -1,54 +1,53 @@
-use std::sync::{Arc, RwLock};
-
-use std::collections::HashMap;
+use once_cell::sync::Lazy;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 const FLAG_SEP: &str = " | ";
 
-// Generate the static lookups we need to translate numbers to strings
-lazy_static! {
-    // These are all of the flags that are defined
-    // (from https://github.com/dlcowen/FSEventsParser/blob/master/FSEParser_V3.3.py)
-    static ref FLAGS: Vec<(&'static str, u32)> = vec!(
-        ("FolderEvent"         , 0x_0000_0001),
-        ("Mount"               , 0x_0000_0002),
-        ("Unmount"             , 0x_0000_0004),
-        ("EndOfTransaction"    , 0x_0000_0020),
-        ("LastHardLinkRemoved" , 0x_0000_0800),
-        ("HardLink"            , 0x_0000_1000),
-        ("SymbolicLink"        , 0x_0000_4000),
-        ("FileEvent"           , 0x_0000_8000),
-        ("PermissionChange"    , 0x_0001_0000),
-        ("ExtendedAttrModified", 0x_0002_0000),
-        ("ExtendedAttrRemoved" , 0x_0004_0000),
-        ("DocumentRevisioning" , 0x_0010_0000),
-        ("ItemCloned"          , 0x_0040_0000),
-        ("Created"             , 0x_0100_0000),
-        ("Removed"             , 0x_0200_0000),
-        ("InodeMetaMod"        , 0x_0400_0000),
-        ("Renamed"             , 0x_0800_0000),
-        ("Modified"            , 0x_1000_0000),
-        ("Exchange"            , 0x_2000_0000),
-        ("FinderInfoMod"       , 0x_4000_0000),
-        ("FolderCreated"       , 0x_8000_0000),
-    );
+// These are all of the flags that are defined
+// (from https://github.com/dlcowen/FSEventsParser/blob/master/FSEParser_V3.3.py)
+static FLAGS: [(&str, u32); 21] = [
+    ("FolderEvent", 0x_0000_0001),
+    ("Mount", 0x_0000_0002),
+    ("Unmount", 0x_0000_0004),
+    ("EndOfTransaction", 0x_0000_0020),
+    ("LastHardLinkRemoved", 0x_0000_0800),
+    ("HardLink", 0x_0000_1000),
+    ("SymbolicLink", 0x_0000_4000),
+    ("FileEvent", 0x_0000_8000),
+    ("PermissionChange", 0x_0001_0000),
+    ("ExtendedAttrModified", 0x_0002_0000),
+    ("ExtendedAttrRemoved", 0x_0004_0000),
+    ("DocumentRevisioning", 0x_0010_0000),
+    ("ItemCloned", 0x_0040_0000),
+    ("Created", 0x_0100_0000),
+    ("Removed", 0x_0200_0000),
+    ("InodeMetaMod", 0x_0400_0000),
+    ("Renamed", 0x_0800_0000),
+    ("Modified", 0x_1000_0000),
+    ("Exchange", 0x_2000_0000),
+    ("FinderInfoMod", 0x_4000_0000),
+    ("FolderCreated", 0x_8000_0000),
+];
 
-    // Turn the flags into a lookup map since we'll cache all of the numbers we find while parsing
-    // Because we can't guarantee that each entry will be around forever we need to wrap it in
-    // an Arc.  The map itself is behind a rwLock so we can modify the entries when we find a flag
-    // that hasn't been seen before
-    static ref FLAG_MAP: RwLock<HashMap<u32, Arc<String>>> = {
-        let mut m = HashMap::with_capacity(FLAGS.len() * 3);
+// Turn the flags into a lookup map since we'll cache all of the numbers we find while parsing
+// Because we can't guarantee that each entry will be around forever we need to wrap it in
+// an Arc.  The map itself is behind a rwLock so we can modify the entries when we find a flag
+// that hasn't been seen before
+static FLAG_MAP: Lazy<RwLock<HashMap<u32, Arc<String>>>> = Lazy::new(|| {
+    let mut m = HashMap::with_capacity(FLAGS.len() * 3);
 
-        for (name, num) in FLAGS.iter() {
-            m.insert(*num, Arc::new((*name).to_owned()));
-        }
+    for (name, num) in FLAGS.iter() {
+        m.insert(*num, Arc::new((*name).to_owned()));
+    }
 
-        // We'll probably need this
-        m.insert(0, Arc::new("".to_string()));
+    // We'll probably need this
+    m.insert(0, Arc::new("".to_string()));
 
-        RwLock::new(m)
-    };
-}
+    RwLock::new(m)
+});
 
 /// Turn the flag bits into a string. We simply enumerate the flags, see if it's set, and add the
 /// str to the list of flags found so far (comma separated)
@@ -99,8 +98,6 @@ pub fn parse_bits(bits: u32) -> Arc<String> {
 
 #[cfg(test)]
 mod tests {
-    use env_logger;
-
     use super::*;
 
     #[test]
