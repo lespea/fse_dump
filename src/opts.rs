@@ -1,11 +1,11 @@
 use std::{ffi::OsStr, path::PathBuf};
 
-use clap::StructOpt;
+use clap::Parser;
 
 use crate::io::{self, ErrorKind};
 
-#[derive(Debug, StructOpt)]
-#[structopt(author, about)]
+#[derive(Debug, Parser)]
+#[command(about, author, version)]
 pub struct Opts {
     /// If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
     #[structopt(long = "csvs")]
@@ -21,7 +21,7 @@ pub struct Opts {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[structopt(short = 'c', long = "csv", parse(from_os_str))]
+    #[structopt(short = 'c', long = "csv")]
     pub csv: Option<PathBuf>,
 
     /// If we should dump the combined records into a single json.
@@ -30,18 +30,18 @@ pub struct Opts {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[structopt(short = 'j', long = "json", parse(from_os_str))]
+    #[structopt(short = 'j', long = "json")]
     pub json: Option<PathBuf>,
 
     /// If we should dump the unique paths/operations found into a csv
     ///
     /// We'll combine all of the operations for each path so there is one entry per path
-    #[structopt(short = 'u', long = "unique", parse(from_os_str))]
+    #[structopt(short = 'u', long = "unique")]
     pub uniques: Option<PathBuf>,
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
     /// that has a filename consisting solely of hex chars will be considered a file to parse
-    #[structopt(parse(from_os_str), required = true, min_values = 1)]
+    #[structopt(required = true)]
     pub files: Vec<PathBuf>,
 
     /// The level we should compress the output as; 0-9
