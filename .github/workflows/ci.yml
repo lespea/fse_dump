@@ -27,10 +27,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         name: clippy/fmt
         with:
-          components: clippy
+          components: clippy, cargofmt
       - run: cargo clippy -q
       - run: cargo fmt -q
 
+      - uses: dtolnay/rust-toolchain@nightly
+        name: test nightly
+      - run: cargo test
+
       - uses: dtolnay/rust-toolchain@stable
-        name: test
+        name: test stable
       - run: cargo test
