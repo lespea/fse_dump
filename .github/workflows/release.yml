@@ -39,7 +39,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
           components: clippy
-      - run: cargo clippy --verbose --release
+      - run: cargo clippy -q --release
+      - run: cargo test --verbose --release
       - run: cargo build --verbose --release
 
       - uses: svenstaro/upload-release-action@v2
