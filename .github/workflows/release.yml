@@ -38,7 +38,6 @@ jobs:
         name: check and build
         with:
           target: ${{ matrix.target }}
-          override: true
           components: clippy
       - run: cargo clippy --verbose --release
       - run: cargo build --verbose --release
