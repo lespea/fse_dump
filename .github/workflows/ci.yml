@@ -28,21 +28,18 @@ jobs:
         name: test stable
         with:
           target: ${{ matrix.target }}
-          override: true
-      - run: cargo test
+      - run: cargo test --verbose
 
       - uses: dtolnay/rust-toolchain@nightly
         name: clippy/fmt
         with:
           target: ${{ matrix.target }}
-          override: true
           components: clippy, rustfmt
-      - run: cargo clippy -q
-      - run: cargo fmt -q
+      - run: cargo clippy -q --verbose
+      - run: cargo fmt -q --verbose
 
       - uses: dtolnay/rust-toolchain@nightly
         name: test nightly
         with:
           target: ${{ matrix.target }}
-          override: true
-      - run: cargo test
+      - run: cargo test --verbose
