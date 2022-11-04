@@ -19,12 +19,12 @@ jobs:
             target: aarch64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         name: checkout
         with:
           fetch-depth: 1
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         name: setup rust
         with:
           toolchain: stable
@@ -32,19 +32,21 @@ jobs:
           override: true
           components: rustfmt, clippy
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@nightly
         name: clippy
         with:
+          components: clippy
           command: clippy
           args: -q
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@stable
         name: test
         with:
           command: test
 
-      - uses: actions-rs/cargo@v1
+      - uses: dtolnay/rust-toolchain@nightly
         name: fmt
         with:
+          components: rustfmt
           command: fmt
           args: -q
