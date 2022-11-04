@@ -19,32 +19,27 @@ jobs:
             target: aarch64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         name: checkout
         with:
           fetch-depth: 1
 
-      - uses: actions-rs/toolchain@v1
-        name: setup rust
+      - uses: dtolnay/rust-toolchain@stable
+        name: test stable
         with:
-          toolchain: stable
           target: ${{ matrix.target }}
-          override: true
-          components: rustfmt, clippy
+      - run: cargo test --verbose
 
-      - uses: actions-rs/cargo@v1
-        name: clippy
+      - uses: dtolnay/rust-toolchain@nightly
+        name: clippy/fmt
         with:
-          command: clippy
-          args: -q
+          target: ${{ matrix.target }}
+          components: clippy, rustfmt
+      - run: cargo clippy -q
+      - run: cargo fmt -q
 
-      - uses: actions-rs/cargo@v1
-        name: test
+      - uses: dtolnay/rust-toolchain@nightly
+        name: test nightly
         with:
-          command: test
-
-      - uses: actions-rs/cargo@v1
-        name: fmt
-        with:
-          command: fmt
-          args: -q
+          target: ${{ matrix.target }}
+      - run: cargo test --verbose
