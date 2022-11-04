@@ -24,29 +24,13 @@ jobs:
         with:
           fetch-depth: 1
 
-      - uses: dtolnay/rust-toolchain@stable
-        name: setup rust
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-          components: rustfmt, clippy
-
       - uses: dtolnay/rust-toolchain@nightly
-        name: clippy
+        name: clippy/fmt
         with:
           components: clippy
-          command: clippy
-          args: -q
+      - run: cargo clippy -q
+      - run: cargo fmt -q
 
       - uses: dtolnay/rust-toolchain@stable
         name: test
-        with:
-          command: test
-
-      - uses: dtolnay/rust-toolchain@nightly
-        name: fmt
-        with:
-          components: rustfmt
-          command: fmt
-          args: -q
+      - run: cargo test
