@@ -35,8 +35,8 @@ jobs:
         with:
           target: ${{ matrix.target }}
           components: clippy, rustfmt
-      - run: cargo clippy -q --verbose
-      - run: cargo fmt -q --verbose
+      - run: cargo clippy -q
+      - run: cargo fmt -q
 
       - uses: dtolnay/rust-toolchain@nightly
         name: test nightly
