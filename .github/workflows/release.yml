@@ -29,42 +29,19 @@ jobs:
             oname: "-darwin_arm64"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         name: checkout
         with:
           fetch-depth: 1
 
-      - uses: actions-rs/toolchain@v1
-        name: setup rust
+      - uses: dtolnay/rust-toolchain@stable
+        name: check and build
         with:
-          toolchain: stable
           target: ${{ matrix.target }}
           override: true
-          components: rustfmt, clippy
-
-      - uses: actions-rs/cargo@v1
-        name: clippy
-        with:
-          command: clippy
-          args: -q --release
-
-      - uses: actions-rs/cargo@v1
-        name: test
-        with:
-          command: test
-          args: --release
-
-      - uses: actions-rs/cargo@v1
-        name: fmt
-        with:
-          command: fmt
-          args: -q
-
-      - uses: actions-rs/cargo@v1
-        name: release
-        with:
-          command: build
-          args: --verbose --release
+          components: clippy
+      - run: cargo clippy --verbose --release
+      - run: cargo build --verbose --release
 
       - uses: svenstaro/upload-release-action@v2
         name: Upload binaries to release
@@ -80,13 +57,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
       - uses: katyo/publish-crates@v1
         with:
           registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
