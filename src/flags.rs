@@ -61,7 +61,7 @@ fn bits_to_str(bits: u32) -> String {
             if !s.is_empty() {
                 s.push_str(FLAG_SEP)
             }
-            s.push_str(*name)
+            s.push_str(name)
         }
     }
 
