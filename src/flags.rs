@@ -1,8 +1,6 @@
+use hashbrown::HashMap;
 use once_cell::sync::Lazy;
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 const FLAG_SEP: &str = " | ";
 
