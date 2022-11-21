@@ -30,10 +30,10 @@ mod record;
 mod uniques;
 mod version;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(target_env = "linux")))]
 use tikv_jemallocator::Jemalloc;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(all(not(target_env = "msvc"), not(target_env = "linux")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
