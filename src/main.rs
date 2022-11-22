@@ -30,12 +30,12 @@ mod record;
 mod uniques;
 mod version;
 
-#[cfg(all(not(target_env = "msvc"), not(target_env = "linux")))]
-use tikv_jemallocator::Jemalloc;
+#[cfg(not(linux))]
+use mimalloc::MiMalloc;
 
-#[cfg(all(not(target_env = "msvc"), not(target_env = "linux")))]
+#[cfg(not(linux))]
 #[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn is_gz(path: &Path) -> bool {
     match path.extension() {
