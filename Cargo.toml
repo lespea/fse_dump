@@ -34,13 +34,12 @@ serde_derive = "1"
 serde_json = "1"
 walkdir = "2"
 
-[target.'cfg(not(linux))'.dependencies]
+[target.'cfg(not(target_os="linux"))'.dependencies]
 mimalloc = "0.1"
 flate2 = { version = "1.0", features = ["zlib-ng"], default-features = false }
 
-[target.'cfg(linux)'.dependencies]
+[target.'cfg(target_os="linux")'.dependencies]
 flate2 = "1.0"
-
 
 [profile.dev]
 opt-level = 1

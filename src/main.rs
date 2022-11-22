@@ -30,10 +30,10 @@ mod record;
 mod uniques;
 mod version;
 
-#[cfg(not(linux))]
+#[cfg(not(target_os = "linux"))]
 use mimalloc::MiMalloc;
 
-#[cfg(not(linux))]
+#[cfg(not(target_os = "linux"))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
