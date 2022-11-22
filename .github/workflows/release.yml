@@ -58,7 +58,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref }}
-          file: target/release/fse_dump${{ matrix.ext }}
+          file: target/${{ matrix.target }}/release/fse_dump${{ matrix.ext }}
           asset_name: fse_dump-${{ github.ref_name }}${{ matrix.oname }}${{ matrix.ext }}
 
   publish:
