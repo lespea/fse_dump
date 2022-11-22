@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: install musl tools
-        if: matrix.os == "ubuntu-latest"
+        if: ${{ matrix.os == "ubuntu-latest" }}
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-gcc
@@ -35,7 +35,7 @@ jobs:
           target: ${{ matrix.target }}
 
       - run: cargo test --target ${{ matrix.target }} --verbose
-        if: matrix.target != "aarch64-apple-darwin"
+        if: ${{ matrix.target != "aarch64-apple-darwin" }}
         name: test stable
 
       - uses: dtolnay/rust-toolchain@nightly
@@ -51,4 +51,4 @@ jobs:
 
       - name: test nightly
         run: cargo test --target ${{ matrix.target }} --verbose
-        if: matrix.target != "aarch64-apple-darwin"
+        if: ${{ matrix.target != "aarch64-apple-darwin" }}
