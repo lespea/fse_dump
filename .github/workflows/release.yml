@@ -29,6 +29,12 @@ jobs:
             oname: "-darwin_arm64"
 
     steps:
+      - name: install musl tools
+        if: os == "ubuntu-latest"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-gcc
+
       - uses: actions/checkout@v3
         name: checkout
         with:
@@ -41,6 +47,7 @@ jobs:
           components: clippy
       - run: cargo clippy -q --release
       - run: cargo test --verbose --release
+        if: target != "aarch64-apple-darwin"
       - run: cargo build --verbose --release
 
       - uses: svenstaro/upload-release-action@v2
@@ -50,7 +57,7 @@ jobs:
           tag: ${{ github.ref }}
           file: target/release/fse_dump${{ matrix.ext }}
           asset_name: fse_dump-${{ github.ref_name }}${{ matrix.oname }}${{ matrix.ext }}
-      
+
   publish:
     name: Publish
     needs: build_and_release
