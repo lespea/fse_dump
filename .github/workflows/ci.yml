@@ -31,24 +31,24 @@ jobs:
           fetch-depth: 1
 
       - uses: dtolnay/rust-toolchain@stable
-        name: test stable
         with:
           target: ${{ matrix.target }}
 
       - run: cargo test --target ${{ matrix.target }} --verbose
-        if: target != "aarch64-apple-darwin"
+        if: matrix.target != "aarch64-apple-darwin"
+        name: test stable
 
       - uses: dtolnay/rust-toolchain@nightly
-        name: clippy/fmt
         with:
           target: ${{ matrix.target }}
           components: clippy, rustfmt
 
       - run: cargo clippy --target ${{ matrix.target }} -q
+        name: clippy
+
       - run: cargo fmt -q
+        name: fmt
 
       - name: test nightly
-        with:
-          target: ${{ matrix.target }}
-      - run: cargo test --target ${{ matrix.target }} --verbose
-        if: target != "aarch64-apple-darwin"
+        run: cargo test --target ${{ matrix.target }} --verbose
+        if: matrix.target != "aarch64-apple-darwin"
