@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: install musl tools
-        if: ${{ matrix.os == "ubuntu-latest" }}
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-gcc
@@ -49,7 +49,7 @@ jobs:
       - run: cargo clippy -q --release
 
       - run: cargo test --verbose --release
-        if: ${{ matrix.target != "aarch64-apple-darwin" }}
+        if: ${{ matrix.target != 'aarch64-apple-darwin' }}
 
       - run: cargo build --verbose --release
 
