@@ -46,12 +46,12 @@ jobs:
           target: ${{ matrix.target }}
           components: clippy
 
-      - run: cargo clippy -q --release
+      - run: cargo clippy --target ${{ matrix.target }} -q --release
 
-      - run: cargo test --verbose --release
+      - run: cargo test --target ${{ matrix.target }} --verbose --release
         if: ${{ matrix.target != 'aarch64-apple-darwin' }}
 
-      - run: cargo build --verbose --release
+      - run: cargo build --target ${{ matrix.target }} --verbose --release
 
       - uses: svenstaro/upload-release-action@v2
         name: Upload binaries to release
