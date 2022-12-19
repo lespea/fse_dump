@@ -205,7 +205,7 @@ fn main() -> io::Result<()> {
                     fscope.spawn(move |_| {
                         let ext = f
                             .extension()
-                            .map_or_else(|| "csv".to_string(), |e| format!("{:?}.csv", e));
+                            .map_or_else(|| "csv".to_string(), |e| format!("{e:?}.csv"));
 
                         let mut csv_out = csv::Writer::from_path(f.with_extension(ext))
                             .expect("Couldn't open a csv writer");
@@ -236,7 +236,7 @@ fn main() -> io::Result<()> {
                     fscope.spawn(move |_| {
                         let ext = f
                             .extension()
-                            .map_or_else(|| "json".to_string(), |e| format!("{:?}.json", e));
+                            .map_or_else(|| "json".to_string(), |e| format!("{e:?}.json"));
 
                         let mut json_out = BufWriter::new(
                             File::create(f.with_extension(ext))
