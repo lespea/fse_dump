@@ -116,7 +116,7 @@ mod tests {
                 if !string.is_empty() {
                     string.push_str(FLAG_SEP);
                 }
-                string.push_str(*new_str);
+                string.push_str(new_str);
                 (string, flag | new_flag)
             },
         );
@@ -144,7 +144,7 @@ mod tests {
                 if !string.is_empty() {
                     string.push_str(FLAG_SEP);
                 }
-                string.push_str(*new_str);
+                string.push_str(new_str);
                 (string, flag | new_flag)
             },
         );
