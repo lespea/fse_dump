@@ -48,9 +48,9 @@ checksum = "487f1e0fcbe47deb8b0574e646def1c903389d95241dd1bbcc6ce4a715dfc0c1"
 
 [[package]]
 name = "bus"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80cb4625f5b60155ff1018c9d4ce2e38bf5ae3e5780dfab9fa68bb44a6b751e2"
+checksum = "34701d821c19736317bc716b8eb6153a78b431b06fbd3950716cedc705a6c811"
 dependencies = [
  "crossbeam-channel",
  "num_cpus",
