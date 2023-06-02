@@ -332,7 +332,6 @@ dependencies = [
  "hashbrown",
  "log",
  "mimalloc",
- "once_cell",
  "serde",
  "serde_derive",
  "serde_json",

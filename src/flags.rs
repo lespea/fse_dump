@@ -1,6 +1,5 @@
 use hashbrown::HashMap;
-use once_cell::sync::Lazy;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, OnceLock};
 
 const FLAG_SEP: &str = " | ";
 
@@ -34,18 +33,22 @@ static FLAGS: [(&str, u32); 21] = [
 // Because we can't guarantee that each entry will be around forever we need to wrap it in
 // an Arc.  The map itself is behind a rwLock so we can modify the entries when we find a flag
 // that hasn't been seen before
-static FLAG_MAP: Lazy<RwLock<HashMap<u32, Arc<String>>>> = Lazy::new(|| {
-    let mut m = HashMap::with_capacity(FLAGS.len() * 3);
+static FLAG_MAP: OnceLock<RwLock<HashMap<u32, Arc<String>>>> = OnceLock::new();
 
-    for (name, num) in FLAGS.iter() {
-        m.insert(*num, Arc::new((*name).to_owned()));
-    }
+pub fn flag_map() -> &'static RwLock<HashMap<u32, Arc<String>>> {
+    FLAG_MAP.get_or_init(|| {
+        let mut m = HashMap::with_capacity(FLAGS.len() * 3);
 
-    // We'll probably need this
-    m.insert(0, Arc::new("".to_string()));
+        for (name, num) in FLAGS.iter() {
+            m.insert(*num, Arc::new((*name).to_owned()));
+        }
 
-    RwLock::new(m)
-});
+        // We'll probably need this
+        m.insert(0, Arc::new("".to_string()));
+
+        RwLock::new(m)
+    })
+}
 
 /// Turn the flag bits into a string. We simply enumerate the flags, see if it's set, and add the
 /// str to the list of flags found so far (comma separated)
@@ -73,7 +76,7 @@ fn bits_to_str(bits: u32) -> String {
 pub fn parse_bits(bits: u32) -> Arc<String> {
     debug!(target: "flags", "Translating the bits {}", bits);
     let ans = {
-        FLAG_MAP
+        flag_map()
             .read()
             .expect("Couldn't lock the lookup map?")
             .get(&bits)
@@ -82,7 +85,7 @@ pub fn parse_bits(bits: u32) -> Arc<String> {
 
     ans.unwrap_or_else(|| {
         debug!(target: "flags", "Trying lock");
-        FLAG_MAP
+        flag_map()
             .write()
             .expect("Couldn't lock the lookup map?")
             .entry(bits)
