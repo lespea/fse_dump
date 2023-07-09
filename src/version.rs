@@ -45,8 +45,8 @@ where
 
             if Self::HAS_NODEID {
                 debug!("In V2");
-                let node_id = Some(reader.read_u64::<LittleEndian>()?);
-                debug!("Found node id {}", node_id.unwrap());
+                let node_id = reader.read_u64::<LittleEndian>()?;
+                debug!("Found node id {}", node_id);
                 Ok(Some((
                     rlen + 20,
                     Record {
@@ -54,7 +54,7 @@ where
                         event_id,
                         flag,
                         flags,
-                        node_id,
+                        node_id: Some(node_id),
                     },
                 )))
             } else {
