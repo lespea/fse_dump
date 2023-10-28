@@ -103,7 +103,7 @@ impl Opts {
     fn want_filename(str: &OsStr) -> bool {
         str.to_string_lossy()
             .chars()
-            .all(|c| matches!(c, 'a'..='f' | 'A'..='F' | '0'..='9'))
+            .all(|c| c.is_ascii_hexdigit())
     }
 
     pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
