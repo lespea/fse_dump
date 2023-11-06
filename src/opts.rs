@@ -101,9 +101,7 @@ impl Opts {
 
     #[inline]
     fn want_filename(str: &OsStr) -> bool {
-        str.to_string_lossy()
-            .chars()
-            .all(|c| c.is_ascii_hexdigit())
+        str.to_string_lossy().chars().all(|c| c.is_ascii_hexdigit())
     }
 
     pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
