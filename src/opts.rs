@@ -1,6 +1,7 @@
-use std::{ffi::OsStr, path::PathBuf};
+use std::{ffi::OsStr, ops::Add, path::PathBuf, time::SystemTime};
 
 use clap::Parser;
+use time::OffsetDateTime;
 
 use crate::io::{self, ErrorKind};
 
@@ -47,6 +48,10 @@ pub struct Opts {
     /// The level we should compress the output as; 0-9
     #[structopt(short = 'l', long = "level", default_value = "7")]
     pub level: u32,
+
+    /// How many days we should pull (based off the file mod time)
+    #[structopt(short = 'd', long = "days", default_value = "90")]
+    pub pull_days: u32,
 }
 
 fn stdout_path(path: &Option<PathBuf>) -> bool {
@@ -104,17 +109,46 @@ impl Opts {
         str.to_string_lossy().chars().all(|c| c.is_ascii_hexdigit())
     }
 
+    fn cutoff_time(&self) -> Option<SystemTime> {
+        if self.pull_days > 0 {
+            Some(
+                OffsetDateTime::now_local()
+                    .unwrap_or_else(|_| OffsetDateTime::now_utc())
+                    .add(time::Duration::days(self.pull_days as i64))
+                    .replace_time(time::Time::MIDNIGHT)
+                    .into(),
+            )
+        } else {
+            None
+        }
+    }
+
     pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
-        self.files.iter().flat_map(|path| {
+        let cutoff = self.cutoff_time();
+
+        self.files.iter().flat_map(move |path| {
             walkdir::WalkDir::new(path)
                 .max_depth(1)
                 .follow_links(true)
                 .sort_by(|a, b| a.file_name().cmp(b.file_name()))
                 .into_iter()
-                .filter_map(|e| match e {
+                .filter_map(move |e| match e {
                     Ok(e) => {
                         if let Ok(m) = e.metadata() {
-                            if !m.is_dir() && Opts::want_filename(e.file_name()) {
+                            if !m.is_dir()
+                                && Opts::want_filename(e.file_name())
+                                && if let Some(cut_time) = cutoff {
+                                    if let Ok(mod_time) = m.modified() {
+                                        // Only process files that have a mod time greater than our
+                                        // cutoff time
+                                        mod_time > cut_time
+                                    } else {
+                                        true
+                                    }
+                                } else {
+                                    true
+                                }
+                            {
                                 info!("Found the fs events file {:?}", e.path());
                                 Some(e.into_path())
                             } else {
