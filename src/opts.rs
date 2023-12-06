@@ -1,4 +1,4 @@
-use std::{ffi::OsStr, ops::Add, path::PathBuf, time::SystemTime};
+use std::{ffi::OsStr, ops::Sub, path::PathBuf, time::SystemTime};
 
 use clap::Parser;
 use time::OffsetDateTime;
@@ -114,7 +114,7 @@ impl Opts {
             Some(
                 OffsetDateTime::now_local()
                     .unwrap_or_else(|_| OffsetDateTime::now_utc())
-                    .add(time::Duration::days(self.pull_days as i64))
+                    .sub(time::Duration::days(self.pull_days as i64))
                     .replace_time(time::Time::MIDNIGHT)
                     .into(),
             )
