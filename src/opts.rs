@@ -138,7 +138,7 @@ impl Opts {
                             if !m.is_dir()
                                 && Opts::want_filename(e.file_name())
                                 && if let Some(cut_time) = cutoff {
-                                    if let Ok(mod_time) = m.modified() {
+                                    if let Ok(mod_time) = m.modified().or_else(|_| m.created()) {
                                         // Only process files that have a mod time greater than our
                                         // cutoff time
                                         mod_time > cut_time
