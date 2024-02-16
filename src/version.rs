@@ -1,6 +1,6 @@
 use std::io::{self, prelude::*};
 
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, NativeEndian, ReadBytesExt};
 
 use crate::{flags, record::Record};
 
@@ -28,9 +28,8 @@ trait RecordParser<I>
 where
     I: BufRead,
 {
-    const IS_V3: bool;
-    const IS_V2: bool;
-    const IS_V1: bool;
+    const HAS_NODEID: bool;
+    const HAS_UNKNOWN_NUM: bool;
 
     #[inline]
     fn parse_record(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>> {
@@ -42,58 +41,42 @@ where
             Ok(None)
         } else {
             debug!("Reading path done");
+
             let path = String::from_utf8_lossy(&sbuf[..rlen - 1]).into_owned();
             debug!("Found path {}", path);
+
             let event_id = reader.read_u64::<BigEndian>()?;
             debug!("Found event id {}", event_id);
+
             let flag = reader.read_u32::<BigEndian>()?;
             let flags = flags::parse_bits(flag);
             debug!("Found flags {}", flags);
 
-            if Self::IS_V3 {
-                debug!("In V3");
-                let node_id = reader.read_u64::<LittleEndian>()?;
-                debug!("Found node id {}", node_id);
-                Ok(Some((
-                    // V3 contains an as-of-now unknown extra 4-bytes; skip them for now
-                    rlen + 24,
-                    Record {
-                        path,
-                        event_id,
-                        flag,
-                        flags,
-                        node_id: Some(node_id),
-                    },
-                )))
-            } else if Self::IS_V2 {
-                debug!("In V2");
-                let node_id = reader.read_u64::<LittleEndian>()?;
-                debug!("Found node id {}", node_id);
-                Ok(Some((
-                    rlen + 20,
-                    Record {
-                        path,
-                        event_id,
-                        flag,
-                        flags,
-                        node_id: Some(node_id),
-                    },
-                )))
-            } else if Self::IS_V1 {
-                debug!("In V1");
-                Ok(Some((
-                    rlen + 20,
-                    Record {
-                        path,
-                        event_id,
-                        flag,
-                        flags,
-                        node_id: None,
-                    },
-                )))
+            let mut tlen = rlen + 8 + 4; // u64 + u32
+
+            let node_id = if Self::HAS_NODEID {
+                tlen += 8;
+                Some(reader.read_u64::<LittleEndian>()?)
             } else {
-                unreachable!()
+                None
+            };
+
+            // V3 contains an as-of-now unknown extra 4-bytes; skip them for now
+            if Self::HAS_UNKNOWN_NUM {
+                tlen += 4;
+                let _ = reader.read_u32::<NativeEndian>()?;
             }
+
+            Ok(Some((
+                tlen,
+                Record {
+                    path,
+                    event_id,
+                    flag,
+                    flags,
+                    node_id,
+                },
+            )))
         }
     }
 }
@@ -102,27 +85,24 @@ impl<I> RecordParser<I> for V1
 where
     I: BufRead,
 {
-    const IS_V1: bool = true;
-    const IS_V2: bool = false;
-    const IS_V3: bool = false;
+    const HAS_NODEID: bool = false;
+    const HAS_UNKNOWN_NUM: bool = false;
 }
 
 impl<I> RecordParser<I> for V2
 where
     I: BufRead,
 {
-    const IS_V1: bool = false;
-    const IS_V2: bool = true;
-    const IS_V3: bool = false;
+    const HAS_NODEID: bool = true;
+    const HAS_UNKNOWN_NUM: bool = false;
 }
 
 impl<I> RecordParser<I> for V3
 where
     I: BufRead,
 {
-    const IS_V1: bool = false;
-    const IS_V2: bool = false;
-    const IS_V3: bool = true;
+    const HAS_NODEID: bool = true;
+    const HAS_UNKNOWN_NUM: bool = true;
 }
 
 impl Version {
