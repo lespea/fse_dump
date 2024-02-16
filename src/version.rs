@@ -6,6 +6,7 @@ use crate::{flags, record::Record};
 
 const V1_BYTES: &[u8; 4] = b"1SLD";
 const V2_BYTES: &[u8; 4] = b"2SLD";
+const V3_BYTES: &[u8; 4] = b"3SLD";
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct V1;
@@ -14,16 +15,22 @@ pub struct V1;
 pub struct V2;
 
 #[derive(Debug, Eq, PartialEq)]
+pub struct V3;
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Version {
     Ver1(V1),
     Ver2(V2),
+    Ver3(V3),
 }
 
 trait RecordParser<I>
 where
     I: BufRead,
 {
-    const HAS_NODEID: bool;
+    const IS_V3: bool;
+    const IS_V2: bool;
+    const IS_V1: bool;
 
     #[inline]
     fn parse_record(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>> {
@@ -43,7 +50,22 @@ where
             let flags = flags::parse_bits(flag);
             debug!("Found flags {}", flags);
 
-            if Self::HAS_NODEID {
+            if Self::IS_V3 {
+                debug!("In V3");
+                let node_id = reader.read_u64::<LittleEndian>()?;
+                debug!("Found node id {}", node_id);
+                Ok(Some((
+                    // V3 contains an as-of-now unknown extra 4-bytes; skip them for now
+                    rlen + 24,
+                    Record {
+                        path,
+                        event_id,
+                        flag,
+                        flags,
+                        node_id: Some(node_id),
+                    },
+                )))
+            } else if Self::IS_V2 {
                 debug!("In V2");
                 let node_id = reader.read_u64::<LittleEndian>()?;
                 debug!("Found node id {}", node_id);
@@ -57,7 +79,7 @@ where
                         node_id: Some(node_id),
                     },
                 )))
-            } else {
+            } else if Self::IS_V1 {
                 debug!("In V1");
                 Ok(Some((
                     rlen + 20,
@@ -69,6 +91,8 @@ where
                         node_id: None,
                     },
                 )))
+            } else {
+                unreachable!()
             }
         }
     }
@@ -78,14 +102,27 @@ impl<I> RecordParser<I> for V1
 where
     I: BufRead,
 {
-    const HAS_NODEID: bool = false;
+    const IS_V1: bool = true;
+    const IS_V2: bool = false;
+    const IS_V3: bool = false;
 }
 
 impl<I> RecordParser<I> for V2
 where
     I: BufRead,
 {
-    const HAS_NODEID: bool = true;
+    const IS_V1: bool = false;
+    const IS_V2: bool = true;
+    const IS_V3: bool = false;
+}
+
+impl<I> RecordParser<I> for V3
+where
+    I: BufRead,
+{
+    const IS_V1: bool = false;
+    const IS_V2: bool = false;
+    const IS_V3: bool = true;
 }
 
 impl Version {
@@ -99,6 +136,7 @@ impl Version {
         match &b {
             V1_BYTES => Ok(Some(Version::Ver1(V1))),
             V2_BYTES => Ok(Some(Version::Ver2(V2))),
+            V3_BYTES => Ok(Some(Version::Ver3(V3))),
             _ => Ok(None),
         }
     }
@@ -111,6 +149,7 @@ impl Version {
         match self {
             Version::Ver1(v) => v.parse_record(reader),
             Version::Ver2(v) => v.parse_record(reader),
+            Version::Ver3(v) => v.parse_record(reader),
         }
     }
 }
