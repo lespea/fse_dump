@@ -86,7 +86,7 @@ where
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
         if rlen == 0 || sbuf[rlen - 1] != b'\0' {
-            info!("End of pages discovered :: {}", rlen);
+            debug!("End of pages discovered :: {}", rlen);
             Ok(None)
         } else {
             debug!("Reading path done");
