@@ -329,8 +329,6 @@ fn main() -> io::Result<()> {
                     });
                 };
 
-                if individual_jsons {};
-
                 let path = f.to_string_lossy().into_owned();
 
                 match file_parser::parse_file(f, &mut bus) {
