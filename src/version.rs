@@ -33,7 +33,6 @@ where
     const HAS_NODEID: bool;
     const HAS_UNKNOWN_NUM: bool;
 
-    #[inline]
     fn parse_record(reader: &mut I) -> ParseRet {
         let mut sbuf = Vec::with_capacity(128);
         debug!("Reading path");
@@ -123,6 +122,7 @@ impl Version {
         }
     }
 
+    #[inline]
     pub fn get_parser<I>(&self) -> fn(reader: &mut I) -> ParseRet
     where
         I: BufRead,
