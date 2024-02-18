@@ -6,3 +6,4 @@
 0000000*
 **/*.rs.bk
 .idea/
+!testfiles/**

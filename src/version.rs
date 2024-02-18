@@ -35,7 +35,7 @@ where
 
     #[inline]
     fn parse_record(reader: &mut I) -> ParseRet {
-        let mut sbuf = Vec::with_capacity(1000);
+        let mut sbuf = Vec::with_capacity(128);
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
         if rlen == 0 || sbuf[rlen - 1] != b'\0' {
