@@ -16,6 +16,10 @@ pub struct Opts {
     #[structopt(long = "jsons")]
     pub jsons: bool,
 
+    /// If every fse record file we find should be dumped to a yaml "next" to it (filename + .yaml)
+    #[structopt(long = "yamls")]
+    pub yamls: bool,
+
     /// If we should dump the combined records into a single csv.
     ///
     /// The records will be dumped in the order that they're given on the command line (any dir
@@ -33,6 +37,15 @@ pub struct Opts {
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
     #[structopt(short = 'j', long = "json")]
     pub json: Option<PathBuf>,
+
+    /// If we should dump the combined records into a single yaml.
+    ///
+    /// The records will be dumped in the order that they're given on the command line (any dir
+    /// that is given is expanded to the record files within).
+    ///
+    /// If parallel is enabled than there is no guarantee of order (even within a single file)
+    #[structopt(short = 'y', long = "yaml")]
+    pub yaml: Option<PathBuf>,
 
     /// If we should dump the unique paths/operations found into a csv
     ///

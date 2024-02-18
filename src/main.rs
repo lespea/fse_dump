@@ -61,6 +61,16 @@ where
     }
 }
 
+fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I)
+where
+    I: Write,
+{
+    for rec in recv {
+        serde_yaml::to_writer(&mut writer, &rec).expect("Couldn't write to global yaml");
+        writeln!(writer).expect("Couldn't write to global yaml");
+    }
+}
+
 fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>)
 where
     I: Write,
@@ -92,8 +102,10 @@ fn main() -> io::Result<()> {
     let opts::Opts {
         csvs: individual_csvs,
         jsons: individual_jsons,
+        yamls: individual_yamls,
         csv: csv_path,
         json: json_path,
+        yaml: yaml_path,
         uniques: uniq_path,
         ..
     } = opts;
@@ -149,6 +161,29 @@ fn main() -> io::Result<()> {
                     json_write(recv, io::stdout().lock())
                 } else if is_gz(&p) {
                     json_write(
+                        recv,
+                        flate2::write::GzEncoder::new(
+                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                            g_lvl,
+                        ),
+                    );
+                } else {
+                    json_write(
+                        recv,
+                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                    );
+                };
+            });
+        };
+
+        if let Some(p) = yaml_path {
+            let recv = bus.add_rx();
+
+            scope.spawn(|_| {
+                if path_stdout(&p) {
+                    yaml_write(recv, io::stdout().lock())
+                } else if is_gz(&p) {
+                    yaml_write(
                         recv,
                         flate2::write::GzEncoder::new(
                             BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
@@ -245,6 +280,39 @@ fn main() -> io::Result<()> {
                         'RUNNING: loop {
                             match recv.recv_timeout(wait_dur) {
                                 Ok(r) => { serde_json::to_writer(&mut json_out, &r) }
+                                    .expect("Couldn't write an entry into a csv"),
+                                Err(e) => match e {
+                                    RecvTimeoutError::Timeout => {
+                                        let r = running.read().unwrap();
+                                        if !*r {
+                                            break 'RUNNING;
+                                        }
+                                        thread::yield_now();
+                                    }
+                                    _ => return,
+                                },
+                            }
+                        }
+                    });
+                };
+
+                if individual_yamls {
+                    let f = f.clone();
+                    let mut recv = bus.add_rx();
+                    let running = running.clone();
+
+                    fscope.spawn(move |_| {
+                        let ext = f
+                            .extension()
+                            .map_or_else(|| "yaml".to_string(), |e| format!("{e:?}.yaml"));
+
+                        let mut yaml_out = BufWriter::new(
+                            File::create(f.with_extension(ext))
+                                .expect("Couldn't open a csv writer"),
+                        );
+                        'RUNNING: loop {
+                            match recv.recv_timeout(wait_dur) {
+                                Ok(r) => { serde_yaml::to_writer(&mut yaml_out, &r) }
                                     .expect("Couldn't write an entry into a csv"),
                                 Err(e) => match e {
                                     RecvTimeoutError::Timeout => {
