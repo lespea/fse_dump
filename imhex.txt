@@ -1,0 +1,18 @@
+#include <std/mem.pat>
+
+struct Record {
+    char path[];
+    be u64 event_id;
+    be u32 flag;
+    le u64 node_id;
+    u32 unknown;
+};
+
+struct Info {
+    u8 extra[4];
+    u8 id[4];
+    le u32 plen;
+    Record records[while(!std::mem::eof())];
+};
+
+Info info @ 0x00;
