@@ -8,20 +8,68 @@ const V1_BYTES: &[u8; 4] = b"1SLD";
 const V2_BYTES: &[u8; 4] = b"2SLD";
 const V3_BYTES: &[u8; 4] = b"3SLD";
 
-#[derive(Debug, Eq, PartialEq)]
 pub struct V1;
-
-#[derive(Debug, Eq, PartialEq)]
 pub struct V2;
-
-#[derive(Debug, Eq, PartialEq)]
 pub struct V3;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum Version {
     Ver1,
     Ver2,
     Ver3,
+}
+
+impl Version {
+    #[inline]
+    pub fn from_reader<I>(reader: &mut I) -> io::Result<Option<Version>>
+    where
+        I: BufRead,
+    {
+        let mut b = [0u8; 4];
+        reader.read_exact(&mut b)?;
+        match &b {
+            V1_BYTES => Ok(Some(Version::Ver1)),
+            V2_BYTES => Ok(Some(Version::Ver2)),
+            V3_BYTES => Ok(Some(Version::Ver3)),
+            _ => Ok(None),
+        }
+    }
+
+    #[inline]
+    pub fn get_parser<I>(&self) -> fn(reader: &mut I) -> ParseRet
+    where
+        I: BufRead,
+    {
+        match self {
+            Version::Ver1 => V1::parse_record,
+            Version::Ver2 => V2::parse_record,
+            Version::Ver3 => V3::parse_record,
+        }
+    }
+}
+
+impl<I> RecordParser<I> for V1
+where
+    I: BufRead,
+{
+    const HAS_NODEID: bool = false;
+    const HAS_UNKNOWN_NUM: bool = false;
+}
+
+impl<I> RecordParser<I> for V2
+where
+    I: BufRead,
+{
+    const HAS_NODEID: bool = true;
+    const HAS_UNKNOWN_NUM: bool = false;
+}
+
+impl<I> RecordParser<I> for V3
+where
+    I: BufRead,
+{
+    const HAS_NODEID: bool = true;
+    const HAS_UNKNOWN_NUM: bool = true;
 }
 
 pub type ParseRet = io::Result<Option<(usize, Record)>>;
@@ -78,59 +126,6 @@ where
                     node_id,
                 },
             )))
-        }
-    }
-}
-
-impl<I> RecordParser<I> for V1
-where
-    I: BufRead,
-{
-    const HAS_NODEID: bool = false;
-    const HAS_UNKNOWN_NUM: bool = false;
-}
-
-impl<I> RecordParser<I> for V2
-where
-    I: BufRead,
-{
-    const HAS_NODEID: bool = true;
-    const HAS_UNKNOWN_NUM: bool = false;
-}
-
-impl<I> RecordParser<I> for V3
-where
-    I: BufRead,
-{
-    const HAS_NODEID: bool = true;
-    const HAS_UNKNOWN_NUM: bool = true;
-}
-
-impl Version {
-    #[inline]
-    pub fn from_reader<I>(reader: &mut I) -> io::Result<Option<Version>>
-    where
-        I: BufRead,
-    {
-        let mut b = [0u8; 4];
-        reader.read_exact(&mut b)?;
-        match &b {
-            V1_BYTES => Ok(Some(Version::Ver1)),
-            V2_BYTES => Ok(Some(Version::Ver2)),
-            V3_BYTES => Ok(Some(Version::Ver3)),
-            _ => Ok(None),
-        }
-    }
-
-    #[inline]
-    pub fn get_parser<I>(&self) -> fn(reader: &mut I) -> ParseRet
-    where
-        I: BufRead,
-    {
-        match self {
-            Version::Ver1 => V1::parse_record,
-            Version::Ver2 => V2::parse_record,
-            Version::Ver3 => V3::parse_record,
         }
     }
 }
