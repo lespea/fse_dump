@@ -163,14 +163,14 @@ fn main() -> io::Result<()> {
                     json_write(
                         recv,
                         flate2::write::GzEncoder::new(
-                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                            BufWriter::new(File::create(p).expect("Couldn't create the json file")),
                             g_lvl,
                         ),
                     );
                 } else {
                     json_write(
                         recv,
-                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                        BufWriter::new(File::create(p).expect("Couldn't create the json file")),
                     );
                 };
             });
@@ -186,14 +186,14 @@ fn main() -> io::Result<()> {
                     yaml_write(
                         recv,
                         flate2::write::GzEncoder::new(
-                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                            BufWriter::new(File::create(p).expect("Couldn't create the yaml file")),
                             g_lvl,
                         ),
                     );
                 } else {
                     json_write(
                         recv,
-                        BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
+                        BufWriter::new(File::create(p).expect("Couldn't create the yaml file")),
                     );
                 };
             });
