@@ -10,7 +10,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{self, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{mpsc::RecvTimeoutError, Arc},
     thread,
     time::Duration,
@@ -87,7 +87,7 @@ fn path_stdout(p: &Path) -> bool {
 fn main() -> io::Result<()> {
     let opts = opts::get_opts()?;
     let has_std = opts.validate()?;
-    let file_paths: Vec<PathBuf> = opts.real_files().collect();
+    let file_paths = opts.real_files();
 
     let opts::Opts {
         csvs: individual_csvs,
