@@ -72,3 +72,22 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use bus::Bus;
+
+    use super::parse_file;
+
+    #[test]
+    fn test_v3() {
+        let mut bus = Bus::new(4096);
+        let mut recv = bus.add_rx();
+
+        parse_file("testfiles/v3/test_1.gz".into(), &mut bus).expect("Couldn't find test file");
+        drop(bus);
+
+        let count = recv.iter().count();
+        assert_eq!(count, 2730);
+    }
+}
