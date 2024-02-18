@@ -2,6 +2,7 @@
 *.csv
 *.json
 *.gz
+*.zip
 0000000*
 **/*.rs.bk
 .idea/
