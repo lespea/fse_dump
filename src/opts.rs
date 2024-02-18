@@ -123,48 +123,68 @@ impl Opts {
         }
     }
 
-    pub fn real_files(&self) -> impl Iterator<Item = PathBuf> + '_ {
+    pub fn real_files(&self) -> Vec<PathBuf> {
         let cutoff = self.cutoff_time();
 
-        self.files.iter().flat_map(move |path| {
-            walkdir::WalkDir::new(path)
-                .max_depth(1)
-                .follow_links(true)
-                .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-                .into_iter()
-                .filter_map(move |e| match e {
-                    Ok(e) => {
-                        if let Ok(m) = e.metadata() {
-                            if !m.is_dir()
-                                && Opts::want_filename(e.file_name())
-                                && if let Some(cut_time) = cutoff {
-                                    if let Ok(mod_time) = m.modified().or_else(|_| m.created()) {
-                                        // Only process files that have a mod time greater than our
-                                        // cutoff time
-                                        mod_time > cut_time
-                                    } else {
-                                        true
-                                    }
-                                } else {
-                                    true
-                                }
-                            {
-                                info!("Found the fs events file {:?}", e.path());
-                                Some(e.into_path())
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    }
+        let mut files = Vec::with_capacity(128);
 
-                    Err(err) => {
-                        error!("Error iterating the files: {}", err);
-                        None
+        self.files.iter().for_each(|path| {
+            match path.metadata() {
+                Err(err) => error!("Error processing '{}': {err}", path.display()),
+                Ok(info) => {
+                    if info.is_dir() {
+                        walkdir::WalkDir::new(path)
+                            .max_depth(1)
+                            .follow_links(true)
+                            .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+                            .into_iter()
+                            .for_each(|e| match e {
+                                Ok(e) => {
+                                    if let Ok(m) = e.metadata() {
+                                        if !m.is_dir()
+                                            && Opts::want_filename(e.file_name())
+                                            && if let Some(cut_time) = cutoff {
+                                                if let Ok(mod_time) =
+                                                    m.modified().or_else(|_| m.created())
+                                                {
+                                                    // Only process files that have a mod time greater than our
+                                                    // cutoff time
+                                                    if mod_time > cut_time {
+                                                        true
+                                                    } else {
+                                                        debug!(
+                                                            "Skipping {} due to time cutoff",
+                                                            e.path().display()
+                                                        );
+                                                        false
+                                                    }
+                                                } else {
+                                                    true
+                                                }
+                                            } else {
+                                                true
+                                            }
+                                        {
+                                            debug!("Found the fs events file {:?}", e.path());
+                                            files.push(e.into_path());
+                                        }
+                                    }
+                                }
+
+                                Err(err) => {
+                                    error!("Error iterating the files: {}", err);
+                                }
+                            });
+                    } else if info.is_file() {
+                        files.push(path.clone())
+                    } else {
+                        error!("Unknown file type for '{}': {info:?}", path.display())
                     }
-                })
-        })
+                }
+            }
+        });
+
+        files
     }
 }
 
