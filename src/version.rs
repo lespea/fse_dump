@@ -19,10 +19,12 @@ pub struct V3;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Version {
-    Ver1(V1),
-    Ver2(V2),
-    Ver3(V3),
+    Ver1,
+    Ver2,
+    Ver3,
 }
+
+pub type ParseRet = io::Result<Option<(usize, Record)>>;
 
 trait RecordParser<I>
 where
@@ -32,7 +34,7 @@ where
     const HAS_UNKNOWN_NUM: bool;
 
     #[inline]
-    fn parse_record(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>> {
+    fn parse_record(reader: &mut I) -> ParseRet {
         let mut sbuf = Vec::with_capacity(1000);
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
@@ -114,22 +116,21 @@ impl Version {
         let mut b = [0u8; 4];
         reader.read_exact(&mut b)?;
         match &b {
-            V1_BYTES => Ok(Some(Version::Ver1(V1))),
-            V2_BYTES => Ok(Some(Version::Ver2(V2))),
-            V3_BYTES => Ok(Some(Version::Ver3(V3))),
+            V1_BYTES => Ok(Some(Version::Ver1)),
+            V2_BYTES => Ok(Some(Version::Ver2)),
+            V3_BYTES => Ok(Some(Version::Ver3)),
             _ => Ok(None),
         }
     }
 
-    #[inline]
-    pub fn parse_record<I>(&self, reader: &mut I) -> io::Result<Option<(usize, Record)>>
+    pub fn get_parser<I>(&self) -> fn(reader: &mut I) -> ParseRet
     where
         I: BufRead,
     {
         match self {
-            Version::Ver1(v) => v.parse_record(reader),
-            Version::Ver2(v) => v.parse_record(reader),
-            Version::Ver3(v) => v.parse_record(reader),
+            Version::Ver1 => V1::parse_record,
+            Version::Ver2 => V2::parse_record,
+            Version::Ver3 => V3::parse_record,
         }
     }
 }

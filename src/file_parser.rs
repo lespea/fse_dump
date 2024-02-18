@@ -21,9 +21,9 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
                 if e.kind() == ErrorKind::UnexpectedEof {
                     debug!("eof");
                     break;
-                } else {
-                    return Err(e);
                 }
+
+                return Err(e);
             }
 
             Ok(Some(v)) => v,
@@ -35,6 +35,7 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
                 ));
             }
         };
+        let parse_fun = v.get_parser();
 
         reader.read_exact(&mut [0u8; 4])?;
         let p_len = reader.read_u32::<LittleEndian>()? as usize;
@@ -44,7 +45,7 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
         let mut read = 12usize;
 
         loop {
-            let rec = match v.parse_record(&mut reader)? {
+            let rec = match parse_fun(&mut reader)? {
                 None => break,
                 Some((s, rec)) => {
                     debug!("Read {} bits", s);
