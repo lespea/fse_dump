@@ -21,6 +21,10 @@ pub enum Commands {
     /// Outputs shell completion for fish
     #[clap(aliases = &["gen"])]
     Generate(Generate),
+
+    /// Watch for new fse files, parse them, and write them to the desired output
+    #[cfg(feature = "watch")]
+    Watch(Watch),
 }
 
 #[derive(Debug, Args)]
@@ -28,6 +32,30 @@ pub struct Generate {
     /// If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
     #[arg(value_parser = value_parser!(Shell))]
     pub shell: Shell,
+}
+
+#[cfg(feature = "watch")]
+#[derive(Debug, Args)]
+pub struct Watch {
+    /// The format the parsed files should be output to
+    #[arg(short, long, default_value = "json")]
+    pub format: WatchFormat,
+
+    /// If the outupt should be "pretty" formatted (multi-line)
+    #[arg(short, long)]
+    pub pretty: bool,
+
+    /// The dirs to watch
+    #[arg(default_value = "/.fseventsd/")]
+    pub watch_dirs: Vec<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+#[cfg(feature = "watch")]
+pub enum WatchFormat {
+    Csv,
+    Json,
+    Yaml,
 }
 
 #[derive(Debug, Args)]
@@ -50,7 +78,7 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[arg(short = 'c', long = "csv")]
+    #[arg(short, long)]
     pub csv: Option<PathBuf>,
 
     /// If we should dump the combined records into a single json.
@@ -59,7 +87,7 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[arg(short = 'j', long = "json")]
+    #[arg(short, long)]
     pub json: Option<PathBuf>,
 
     /// If we should dump the combined records into a single yaml.
@@ -68,27 +96,27 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    #[arg(short = 'y', long = "yaml")]
+    #[arg(short, long)]
     pub yaml: Option<PathBuf>,
 
     /// If we should dump the unique paths/operations found into a csv
     ///
     /// We'll combine all of the operations for each path so there is one entry per path
-    #[arg(short = 'u', long = "unique")]
+    #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 
-    /// The fs event files that should be parsed. If any arg is a directory then any file within
-    /// that has a filename consisting solely of hex chars will be considered a file to parse
-    #[arg(required = true)]
-    pub files: Vec<PathBuf>,
-
     /// The level we should compress the output as; 0-9
-    #[arg(short = 'l', long = "level", default_value = "7")]
+    #[arg(short, long, default_value = "7")]
     pub level: u32,
 
     /// How many days we should pull (based off the file mod time)
     #[arg(short = 'd', long = "days", default_value = "90")]
     pub pull_days: u32,
+
+    /// The fs event files that should be parsed. If any arg is a directory then any file within
+    /// that has a filename consisting solely of hex chars will be considered a file to parse
+    #[arg(default_value = "/.fseventsd/")]
+    pub files: Vec<PathBuf>,
 }
 
 fn stdout_path(path: &Option<PathBuf>) -> bool {
