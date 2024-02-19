@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::flags as f;
 
 #[derive(Debug, Default, Eq, PartialEq)]
@@ -21,8 +19,8 @@ impl UniqueCounts {
         UniqueOut {
             path,
             counts: self.counts,
-            flags: flags.norm.clone(),
-            alt_flags: flags.alt.clone(),
+            flags: flags.norm,
+            alt_flags: flags.alt,
         }
     }
 }
@@ -31,6 +29,6 @@ impl UniqueCounts {
 pub struct UniqueOut {
     path: String,
     counts: u64,
-    flags: Arc<String>,
-    alt_flags: Arc<String>,
+    flags: &'static str,
+    alt_flags: &'static str,
 }
