@@ -18,12 +18,17 @@ repository = "https://github.com/lespea/fse_dump"
 [badges]
 maintenance = { status = "actively-developed" }
 
+[features]
+hex = ["dep:serde-hex"]
+extra_id = []
+default = ["hex", "extra_id"]
+
 [dependencies]
 bus = "2"
 byteorder = "1"
 clap = { version = "4", features = ["derive"] }
-clap_complete = "4.5.1"
-color-eyre = { version = "0.6.2", default-features = false }
+clap_complete = "4.5"
+color-eyre = { version = "0.6", default-features = false }
 crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
@@ -33,11 +38,11 @@ hashbrown = "0.14"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 mimalloc = { version = "0.1", features = ["secure"] }
 serde = { version = "1", features = ["rc"] }
-serde-hex = "0.1.0"
+serde-hex = {version="0.1",optional=true}
 serde_derive = "1"
 serde_json = "1"
 serde_yaml = "0.9"
-time = { version = "0.3.32", features = ["local-offset"] }
+time = { version = "0.3", features = ["local-offset"] }
 walkdir = "2"
 
 [profile.dev]

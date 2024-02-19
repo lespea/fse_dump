@@ -1,3 +1,4 @@
+#[cfg(feature = "hex")]
 use serde_hex::{CompactCapPfx, SerHexOpt};
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -8,8 +9,9 @@ pub struct Record {
     pub flag: u32,
     pub flags: &'static str,
     pub alt_flags: &'static str,
-    #[serde(with = "SerHexOpt::<CompactCapPfx>")]
+    #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub node_id: Option<u64>,
-    #[serde(with = "SerHexOpt::<CompactCapPfx>")]
+    #[cfg(feature = "extra_id")]
+    #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub extra_id: Option<u32>,
 }
