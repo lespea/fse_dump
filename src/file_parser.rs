@@ -1,17 +1,18 @@
 use std::{
     fs::File,
-    io::{self, prelude::*, BufReader, ErrorKind},
+    io::{prelude::*, BufReader, ErrorKind},
     path::PathBuf,
     sync::Arc,
 };
 
 use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
+use color_eyre::{eyre::eyre, Result};
 use flate2::read::MultiGzDecoder;
 
 use crate::{record::Record, version};
 
-pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()> {
+pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> Result<()> {
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
 
     loop {
@@ -23,16 +24,13 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
                     break;
                 }
 
-                return Err(e);
+                return Err(e.into());
             }
 
             Ok(Some(v)) => v,
 
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Unsupported type",
-                ));
+                return Err(eyre!("Unsupported type",));
             }
         };
         let parse_fun = v.get_parser();
@@ -61,10 +59,7 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> io::Result<()
                     debug!("Wanted len");
                     break;
                 } else {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "Length of page records didn't match expected length",
-                    ));
+                    return Err(eyre!("Length of page records didn't match expected length",));
                 }
             }
         }
