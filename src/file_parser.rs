@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     io::{prelude::*, BufReader, ErrorKind},
-    path::PathBuf,
+    path::Path,
     sync::Arc,
 };
 
@@ -12,7 +12,7 @@ use flate2::read::MultiGzDecoder;
 
 use crate::{record::Record, version};
 
-pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> Result<()> {
+pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
 
     loop {
@@ -70,6 +70,8 @@ pub fn parse_file(in_file: PathBuf, bus: &mut Bus<Arc<Record>>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use bus::Bus;
 
     use super::parse_file;
@@ -79,7 +81,8 @@ mod tests {
         let mut bus = Bus::new(4096);
         let mut recv = bus.add_rx();
 
-        parse_file("testfiles/v3/test_1.gz".into(), &mut bus).expect("Couldn't find test file");
+        let path: PathBuf = "testfiles/v3/test_1.gz".into();
+        parse_file(&path, &mut bus).expect("Couldn't find test file");
         drop(bus);
 
         let count = recv.iter().count();

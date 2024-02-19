@@ -44,6 +44,8 @@ fn main() -> Result<()> {
     match opts::get_opts()?.command {
         Commands::Dump(d) => dump(d),
         Commands::Generate(g) => generate(g),
+        #[cfg(feature = "watch")]
+        Commands::Watch(w) => watch(w),
     }
 }
 
@@ -63,13 +65,20 @@ where
     }
 }
 
-fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I)
+fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, pretty: bool)
 where
     I: Write,
 {
-    for rec in recv {
-        serde_json::to_writer(&mut writer, &rec).expect("Couldn't write to global json");
-        writeln!(writer).expect("Couldn't write to global json");
+    if pretty {
+        for rec in recv {
+            serde_json::to_writer_pretty(&mut writer, &rec).expect("Couldn't write to global json");
+            writeln!(writer).expect("Couldn't write to global json");
+        }
+    } else {
+        for rec in recv {
+            serde_json::to_writer(&mut writer, &rec).expect("Couldn't write to global json");
+            writeln!(writer).expect("Couldn't write to global json");
+        }
     }
 }
 
@@ -174,7 +183,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
             scope.spawn(|_| {
                 if path_stdout(&p) {
-                    json_write(recv, io::stdout().lock())
+                    json_write(recv, io::stdout().lock(), false)
                 } else if is_gz(&p) {
                     json_write(
                         recv,
@@ -182,11 +191,13 @@ fn dump(opts: opts::Dump) -> Result<()> {
                             BufWriter::new(File::create(p).expect("Couldn't create the json file")),
                             g_lvl,
                         ),
+                        false,
                     );
                 } else {
                     json_write(
                         recv,
                         BufWriter::new(File::create(p).expect("Couldn't create the json file")),
+                        false,
                     );
                 };
             });
@@ -207,7 +218,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                         ),
                     );
                 } else {
-                    json_write(
+                    yaml_write(
                         recv,
                         BufWriter::new(File::create(p).expect("Couldn't create the yaml file")),
                     );
@@ -347,7 +358,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
                 let path = f.to_string_lossy().into_owned();
 
-                match file_parser::parse_file(f, &mut bus) {
+                match file_parser::parse_file(&f, &mut bus) {
                     Ok(_) => info!("Finished parsing {}", path),
                     Err(e) => error!("Couldn't parse '{}': {}", path, e),
                 };
@@ -370,5 +381,62 @@ fn generate(gen: Generate) -> Result<()> {
     let name = cmd.get_name().to_string();
 
     clap_complete::generate(gen.shell, &mut cmd, name, &mut io::stdout().lock());
+    Ok(())
+}
+
+#[cfg(feature = "watch")]
+fn watch(opts: opts::Watch) -> Result<()> {
+    use notify_debouncer_full::{
+        new_debouncer,
+        notify::{RecursiveMode, Watcher},
+        DebounceEventResult,
+    };
+
+    use crate::file_parser::parse_file;
+
+    let (send, recv) = crossbeam_channel::bounded(128);
+
+    let mut debouncer = new_debouncer(
+        Duration::from_secs(2),
+        None,
+        move |result: DebounceEventResult| match result {
+            Ok(events) => events.iter().for_each(|event| {
+                if event.kind.is_create() {
+                    if let Some(path) = event.paths.first() {
+                        if let Err(err) = send.send_timeout(path.clone(), Duration::from_secs(1)) {
+                            error!("Error processing created file {}: {err}", path.display());
+                        }
+                    }
+                }
+            }),
+            Err(errors) => errors
+                .iter()
+                .for_each(|error| error!("Watch error: {error:?}")),
+        },
+    )?;
+
+    for path in opts.watch_dirs {
+        debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
+        debouncer.cache().add_root(&path, RecursiveMode::Recursive);
+    }
+
+    crossbeam::scope(|fscope| {
+        let mut bus: Bus<Arc<Record>> = Bus::new(512);
+
+        let rec_recv = bus.add_rx();
+        fscope.spawn(move |_| match opts.format {
+            opts::WatchFormat::Csv => csv_write(rec_recv, csv::Writer::from_writer(io::stdout())),
+            opts::WatchFormat::Json => json_write(rec_recv, io::stdout(), opts.pretty),
+            opts::WatchFormat::Yaml => yaml_write(rec_recv, io::stdout()),
+        });
+
+        for path in recv {
+            if let Err(err) = parse_file(&path, &mut bus) {
+                error!("Error parsing {}: {err}", path.display());
+            }
+        }
+    })
+    .unwrap();
+
     Ok(())
 }
