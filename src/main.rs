@@ -17,8 +17,8 @@ use std::{
 };
 
 use bus::{Bus, BusReader};
-use csv::{self, Writer};
-use env_logger::{self, Target, WriteStyle};
+use csv::Writer;
+use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
 
 use crate::record::Record;
