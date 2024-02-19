@@ -19,9 +19,11 @@ repository = "https://github.com/lespea/fse_dump"
 maintenance = { status = "actively-developed" }
 
 [features]
-hex = ["dep:serde-hex"]
+default = ["hex", "extra_id", "watch"]
+
 extra_id = []
-default = ["hex", "extra_id"]
+hex = ["dep:serde-hex"]
+watch = ["dep:notify-debouncer-full"]
 
 [dependencies]
 bus = "2"
@@ -37,8 +39,9 @@ flate2 = { version = "1", features = ["cloudflare_zlib"], default-features = fal
 hashbrown = "0.14"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 mimalloc = { version = "0.1", features = ["secure"] }
+notify-debouncer-full =  {version="0.3", optional=true}
 serde = { version = "1", features = ["rc"] }
-serde-hex = {version="0.1",optional=true}
+serde-hex = {version="0.1", optional=true}
 serde_derive = "1"
 serde_json = "1"
 serde_yaml = "0.9"
