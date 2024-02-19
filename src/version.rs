@@ -111,10 +111,12 @@ where
             };
 
             // V3 contains an as-of-now unknown extra 4-bytes; skip them for now
-            if Self::HAS_UNKNOWN_NUM {
+            let extra_id = if Self::HAS_UNKNOWN_NUM {
                 tlen += 4;
-                let _ = reader.read_u32::<NativeEndian>()?;
-            }
+                Some(reader.read_u32::<NativeEndian>()?)
+            } else {
+                None
+            };
 
             Ok(Some((
                 tlen,
@@ -125,6 +127,7 @@ where
                     flags: flags.norm,
                     alt_flags: flags.alt,
                     node_id,
+                    extra_id,
                 },
             )))
         }
