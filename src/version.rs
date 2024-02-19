@@ -99,7 +99,7 @@ where
 
             let flag = reader.read_u32::<BigEndian>()?;
             let flags = flags::parse_bits(flag);
-            debug!("Found flags {}", flags);
+            debug!("Found flags {:?}", flags);
 
             let mut tlen = rlen + 8 + 4; // u64 + u32
 
@@ -122,7 +122,8 @@ where
                     path,
                     event_id,
                     flag,
-                    flags,
+                    flags: flags.norm.clone(),
+                    alt_flags: flags.alt.clone(),
                     node_id,
                 },
             )))

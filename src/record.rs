@@ -7,5 +7,6 @@ pub struct Record {
     #[serde(skip_serializing)]
     pub flag: u32,
     pub flags: Arc<String>,
+    pub alt_flags: Arc<String>,
     pub node_id: Option<u64>,
 }

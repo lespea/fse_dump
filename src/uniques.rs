@@ -17,10 +17,12 @@ impl UniqueCounts {
 
     #[inline]
     pub fn into_unique_out(self, path: String) -> UniqueOut {
+        let flags = f::parse_bits(self.flags);
         UniqueOut {
             path,
             counts: self.counts,
-            flags: f::parse_bits(self.flags),
+            flags: flags.norm.clone(),
+            alt_flags: flags.alt.clone(),
         }
     }
 }
@@ -30,4 +32,5 @@ pub struct UniqueOut {
     path: String,
     counts: u64,
     flags: Arc<String>,
+    alt_flags: Arc<String>,
 }
