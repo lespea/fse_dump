@@ -1,4 +1,6 @@
+#![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
+#![warn(rust_2021_compatibility)]
 #![deny(warnings)]
 
 #[macro_use]
@@ -17,9 +19,12 @@ use std::{
 };
 
 use bus::{Bus, BusReader};
+use clap::CommandFactory;
+use color_eyre::Result;
 use csv::Writer;
 use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
+use opts::{Commands, Generate};
 
 use crate::record::Record;
 
@@ -34,6 +39,13 @@ use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+
+fn main() -> Result<()> {
+    match opts::get_opts()?.command {
+        Commands::Dump(d) => dump(d),
+        Commands::Generate(g) => generate(g),
+    }
+}
 
 fn is_gz(path: &Path) -> bool {
     match path.extension() {
@@ -94,12 +106,29 @@ fn path_stdout(p: &Path) -> bool {
     p.as_os_str() == "-"
 }
 
-fn main() -> io::Result<()> {
-    let opts = opts::get_opts()?;
-    let has_std = opts.validate()?;
+fn dump(opts: opts::Dump) -> Result<()> {
+    let std_counts = opts.stdout_counts();
+    env_logger::Builder::new()
+        .filter(
+            None,
+            if std_counts == 1 {
+                LevelFilter::Error
+            } else {
+                LevelFilter::Info
+            },
+        )
+        .write_style(WriteStyle::Always)
+        .target(Target::Stderr)
+        .init();
+
+    color_eyre::install()?;
+
+    opts.validate(std_counts)?;
     let file_paths = opts.real_files();
 
-    let opts::Opts {
+    info!("Starting");
+
+    let opts::Dump {
         csvs: individual_csvs,
         jsons: individual_jsons,
         yamls: individual_yamls,
@@ -109,19 +138,6 @@ fn main() -> io::Result<()> {
         uniques: uniq_path,
         ..
     } = opts;
-
-    env_logger::Builder::new()
-        .filter(
-            None,
-            if has_std {
-                LevelFilter::Info
-            } else {
-                LevelFilter::Error
-            },
-        )
-        .write_style(WriteStyle::Always)
-        .target(Target::Stderr)
-        .init();
 
     let g_lvl = flate2::Compression::new(opts.level);
 
@@ -346,5 +362,13 @@ fn main() -> io::Result<()> {
     })
     .expect("Couldn't close all the threads");
 
+    Ok(())
+}
+
+fn generate(gen: Generate) -> Result<()> {
+    let mut cmd = opts::Cli::command();
+    let name = cmd.get_name().to_string();
+
+    clap_complete::generate(gen.shell, &mut cmd, name, &mut io::stdout().lock());
     Ok(())
 }
