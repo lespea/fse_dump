@@ -1,5 +1,5 @@
 use hashbrown::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{OnceLock, RwLock};
 
 const FLAG_SEP: &str = " | ";
 
@@ -66,39 +66,38 @@ static ALT_FLAGS: [(&str, u32); 22] = [
     // ("0x80000000", 0x_8000_0000),
 ];
 
-#[derive(Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct FlagStrs {
-    pub norm: Arc<String>,
-    pub alt: Arc<String>,
+    pub norm: &'static str,
+    pub alt: &'static str,
 }
 
 // Turn the flags into a lookup map since we'll cache all of the numbers we find while parsing
 // Because we can't guarantee that each entry will be around forever we need to wrap it in
 // an Arc.  The map itself is behind a rwLock so we can modify the entries when we find a flag
 // that hasn't been seen before
-static FLAG_MAP: OnceLock<RwLock<HashMap<u32, Arc<FlagStrs>>>> = OnceLock::new();
+static FLAG_MAP: OnceLock<RwLock<HashMap<u32, FlagStrs>>> = OnceLock::new();
 
-pub fn flag_map() -> &'static RwLock<HashMap<u32, Arc<FlagStrs>>> {
+pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
     FLAG_MAP.get_or_init(|| {
-        let mut base = HashMap::with_capacity(FLAGS.len() * 3);
+        let mut base: HashMap<u32, &'static str> = HashMap::with_capacity(FLAGS.len());
 
         for (name, num) in FLAGS.iter() {
-            base.insert(*num, Arc::new(name.to_string()));
+            base.insert(*num, *name);
         }
 
-        let mut combo = HashMap::with_capacity(FLAGS.len() * 3);
+        let mut combo = HashMap::with_capacity(128);
 
         // We'll probably need this
-        combo.insert(0, Arc::new(FlagStrs::default()));
+        combo.insert(0, FlagStrs::default());
 
-        for (name, num) in ALT_FLAGS.iter() {
-            let norm = base.get(num).cloned().unwrap_or_default();
+        for (alt, num) in ALT_FLAGS.iter() {
             combo.insert(
                 *num,
-                Arc::new(FlagStrs {
-                    norm,
-                    alt: Arc::new(name.to_string()),
-                }),
+                FlagStrs {
+                    norm: base.get(num).copied().unwrap_or_default(),
+                    alt,
+                },
             );
         }
 
@@ -138,33 +137,32 @@ fn bits_to_str(bits: u32) -> FlagStrs {
     debug!(target: "flags", "Bits {} == {}/{}", bits, norm, alt);
 
     FlagStrs {
-        norm: Arc::new(norm),
-        alt: Arc::new(alt),
+        norm: Box::leak(norm.into_boxed_str()),
+        alt: Box::leak(alt.into_boxed_str()),
     }
 }
 
 /// Given the bits, return a string representing the flags that are set
-pub fn parse_bits(bits: u32) -> Arc<FlagStrs> {
+pub fn parse_bits(bits: u32) -> FlagStrs {
     debug!(target: "flags", "Translating the bits {}", bits);
     let ans = {
         flag_map()
             .read()
             .expect("Couldn't lock the lookup map?")
             .get(&bits)
-            .cloned()
+            .copied()
     };
 
     ans.unwrap_or_else(|| {
         debug!(target: "flags", "Trying lock");
-        flag_map()
+        *flag_map()
             .write()
             .expect("Couldn't lock the lookup map?")
             .entry(bits)
             .or_insert_with(|| {
                 debug!("Making new flag entry");
-                Arc::new(bits_to_str(bits))
+                bits_to_str(bits)
             })
-            .clone()
     })
 }
 
@@ -176,12 +174,12 @@ mod tests {
     fn simple_bits_to_strs() {
         let _ = env_logger::try_init();
         for (name, flag) in FLAGS.iter() {
-            assert_eq!(bits_to_str(*flag).norm.as_ref(), name);
-            assert_eq!(bits_to_str(*flag).norm.as_ref(), name);
+            assert_eq!(bits_to_str(*flag).norm, *name);
+            assert_eq!(bits_to_str(*flag).norm, *name);
         }
         for (name, flag) in ALT_FLAGS.iter() {
-            assert_eq!(bits_to_str(*flag).alt.as_ref(), name);
-            assert_eq!(bits_to_str(*flag).alt.as_ref(), name);
+            assert_eq!(bits_to_str(*flag).alt, *name);
+            assert_eq!(bits_to_str(*flag).alt, *name);
         }
     }
 
@@ -198,18 +196,18 @@ mod tests {
                 (string, flag | new_flag)
             },
         );
-        assert_eq!(bits_to_str(combo_num).norm.as_ref(), &combo_str);
+        assert_eq!(bits_to_str(combo_num).norm, combo_str);
     }
 
     #[test]
     fn simple_parse_bits() {
         let _ = env_logger::try_init();
         for (name, flag) in FLAGS.iter() {
-            assert_eq!(*parse_bits(*flag).norm.as_ref(), *name);
-            assert_eq!(*parse_bits(*flag).norm.as_ref(), *name);
+            assert_eq!(*parse_bits(*flag).norm, **name);
+            assert_eq!(*parse_bits(*flag).norm, **name);
 
-            assert_eq!(parse_bits(*flag).norm.as_ref(), name);
-            assert_eq!(parse_bits(*flag).norm.as_ref(), name);
+            assert_eq!(parse_bits(*flag).norm, *name);
+            assert_eq!(parse_bits(*flag).norm, *name);
         }
     }
 
@@ -227,7 +225,7 @@ mod tests {
             },
         );
 
-        assert_eq!(*parse_bits(combo_num).norm.as_ref(), combo_str);
-        assert_eq!(*parse_bits(combo_num).norm.as_ref(), combo_str);
+        assert_eq!(*parse_bits(combo_num).norm, combo_str);
+        assert_eq!(*parse_bits(combo_num).norm, combo_str);
     }
 }

@@ -122,8 +122,8 @@ where
                     path,
                     event_id,
                     flag,
-                    flags: flags.norm.clone(),
-                    alt_flags: flags.alt.clone(),
+                    flags: flags.norm,
+                    alt_flags: flags.alt,
                     node_id,
                 },
             )))
