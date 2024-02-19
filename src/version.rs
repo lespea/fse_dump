@@ -111,6 +111,7 @@ where
             };
 
             // V3 contains an as-of-now unknown extra 4-bytes; skip them for now
+            #[allow(unused_variables)]
             let extra_id = if Self::HAS_UNKNOWN_NUM {
                 tlen += 4;
                 Some(reader.read_u32::<NativeEndian>()?)
@@ -127,6 +128,7 @@ where
                     flags: flags.norm,
                     alt_flags: flags.alt,
                     node_id,
+                    #[cfg(feature = "extra_id")]
                     extra_id,
                 },
             )))
