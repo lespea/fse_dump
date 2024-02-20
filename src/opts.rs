@@ -46,7 +46,7 @@ pub struct Watch {
     pub pretty: bool,
 
     /// The dirs to watch
-    #[arg(default_value = "/.fseventsd/")]
+    #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub watch_dirs: Vec<PathBuf>,
 }
 
@@ -115,7 +115,7 @@ pub struct Dump {
 
     /// The fs event files that should be parsed. If any arg is a directory then any file within
     /// that has a filename consisting solely of hex chars will be considered a file to parse
-    #[arg(default_value = "/.fseventsd/")]
+    #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub files: Vec<PathBuf>,
 }
 
