@@ -45,6 +45,10 @@ pub struct Watch {
     #[arg(short, long)]
     pub pretty: bool,
 
+    /// Filter events based on the path
+    #[arg(long)]
+    pub filter: Option<String>,
+
     /// The dirs to watch
     #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub watch_dirs: Vec<PathBuf>,
