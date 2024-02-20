@@ -403,6 +403,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
     )?;
 
     for path in opts.watch_dirs {
+        info!("Watching {}", path.display());
         debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
         debouncer.cache().add_root(&path, RecursiveMode::Recursive);
     }
