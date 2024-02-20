@@ -10,10 +10,15 @@ extern crate serde_derive;
 
 use std::{
     collections::BTreeMap,
+    convert::identity,
     fs::File,
     io::{self, BufWriter, Write},
     path::Path,
-    sync::{mpsc::RecvTimeoutError, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::RecvTimeoutError,
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -56,12 +61,14 @@ fn is_gz(path: &Path) -> bool {
     }
 }
 
-fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>)
+fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool)
 where
     I: Write,
 {
     for rec in recv {
-        writer.serialize(rec).expect("Couldn't write to global csv");
+        if let Err(err) = writer.serialize(rec) {
+            error!("Couldn't serialize csv: {err}");
+        }
     }
 }
 
@@ -71,28 +78,40 @@ where
 {
     if pretty {
         for rec in recv {
-            serde_json::to_writer_pretty(&mut writer, &rec).expect("Couldn't write to global json");
-            writeln!(writer).expect("Couldn't write to global json");
+            if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
+                error!("Couldn't serialize json: {err}");
+            }
+            if let Err(err) = writeln!(writer) {
+                error!("Couldn't append newline: {err}");
+            }
         }
     } else {
         for rec in recv {
-            serde_json::to_writer(&mut writer, &rec).expect("Couldn't write to global json");
-            writeln!(writer).expect("Couldn't write to global json");
+            if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
+                error!("Couldn't serialize json: {err}");
+            }
+            if let Err(err) = writeln!(writer) {
+                error!("Couldn't append newline: {err}");
+            }
         }
     }
 }
 
-fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I)
+fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, _: bool)
 where
     I: Write,
 {
     for rec in recv {
-        serde_yaml::to_writer(&mut writer, &rec).expect("Couldn't write to global yaml");
-        writeln!(writer).expect("Couldn't write to global yaml");
+        if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
+            error!("Couldn't serialize yaml: {err}");
+        }
+        if let Err(err) = writeln!(writer) {
+            error!("Couldn't append newline: {err}");
+        }
     }
 }
 
-fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>)
+fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool)
 where
     I: Write,
 {
@@ -105,14 +124,118 @@ where
     }
 
     for (path, v) in u {
-        writer
-            .serialize(v.into_unique_out(path))
-            .expect("Error writing the uniques");
+        if let Err(err) = writer.serialize(v.into_unique_out(path)) {
+            error!("Error writing the uniques: {err}");
+        }
     }
 }
 
 fn path_stdout(p: &Path) -> bool {
     p.as_os_str() == "-"
+}
+
+#[inline]
+fn icsv(rec: Arc<Record>, writer: &mut Writer<BufWriter<File>>) {
+    if let Err(err) = writer.serialize(&rec) {
+        error!("Error writing json rec: {err}")
+    }
+}
+
+#[inline]
+fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
+    if let Err(err) = serde_json::to_writer(writer, &rec) {
+        error!("Error writing json rec: {err}")
+    }
+}
+
+#[inline]
+fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
+    if let Err(err) = serde_yaml::to_writer(writer, &rec) {
+        error!("Error writing json rec: {err}")
+    }
+}
+
+macro_rules! fdump {
+    ( $bus: ident, $scope: ident, $ftype: expr, $path:ident, $proc_f:ident, $g_lvl: ident, $creater:expr, ) => {
+        if let Some(p) = $path {
+            let recv = $bus.add_rx();
+
+            if path_stdout(&p) {
+                $scope.spawn(move |_| {
+                    $proc_f(recv, $creater(io::stdout().lock()), false);
+                });
+            } else {
+                match File::create(&p) {
+                    Err(err) => error!(
+                        "Couldn't create {} output file {}: {err}",
+                        $ftype,
+                        p.display()
+                    ),
+                    Ok(f) => {
+                        $scope.spawn(move |_| {
+                            if is_gz(&p) {
+                                $proc_f(
+                                    recv,
+                                    $creater(flate2::write::GzEncoder::new(
+                                        BufWriter::new(f),
+                                        $g_lvl,
+                                    )),
+                                    false,
+                                );
+                            } else {
+                                $proc_f(recv, $creater(BufWriter::new(f)), false);
+                            };
+                        });
+                    }
+                }
+            }
+        };
+    };
+}
+
+macro_rules! idump {
+    ( $want: ident, $bus: ident, $fscope: ident, $running: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
+        if $want {
+            let mut out_path = $f.clone();
+            out_path.as_mut_os_string().push(format!(".{}", $ftype));
+
+            match File::create(&out_path) {
+                Err(err) => error!(
+                    "Couldn't open a {} writer at {}: {err}",
+                    $ftype,
+                    out_path.display()
+                ),
+                Ok(w) => {
+                    let mut recv = $bus.add_rx();
+                    let running = $running.clone();
+
+                    $fscope.spawn(move |_| {
+                        let out = &mut $make_out(BufWriter::new(w));
+
+                        'RUNNING: loop {
+                            match recv.recv_timeout(Duration::from_millis(50)) {
+                                Ok(r) => $ifun(r, out),
+                                Err(e) => match e {
+                                    RecvTimeoutError::Timeout => {
+                                        if !running.load(Ordering::Acquire) {
+                                            break 'RUNNING;
+                                        }
+                                        thread::yield_now();
+                                    }
+                                    _ => return,
+                                },
+                            }
+                        }
+                    });
+                }
+            };
+        };
+    };
+}
+
+#[inline]
+fn new_bus() -> Bus<Arc<Record>> {
+    Bus::new(512)
 }
 
 fn dump(opts: opts::Dump) -> Result<()> {
@@ -151,222 +274,74 @@ fn dump(opts: opts::Dump) -> Result<()> {
     let g_lvl = flate2::Compression::new(opts.level);
 
     crossbeam::scope(|scope| {
-        let mut bus: Bus<Arc<Record>> = Bus::new(1000);
+        let mut bus = new_bus();
 
-        if let Some(p) = csv_path {
-            let recv = bus.add_rx();
+        fdump!(
+            bus,
+            scope,
+            "csv",
+            csv_path,
+            csv_write,
+            g_lvl,
+            csv::Writer::from_writer,
+        );
 
-            scope.spawn(|_| {
-                if path_stdout(&p) {
-                    csv_write(recv, csv::Writer::from_writer(io::stdout().lock()));
-                } else if is_gz(&p) {
-                    csv_write(
-                        recv,
-                        csv::Writer::from_writer(flate2::write::GzEncoder::new(
-                            BufWriter::new(File::create(p).expect("Couldn't create the csv file")),
-                            g_lvl,
-                        )),
-                    );
-                } else {
-                    csv_write(
-                        recv,
-                        csv::Writer::from_writer(BufWriter::new(
-                            File::create(p).expect("Couldn't create the csv file"),
-                        )),
-                    );
-                };
-            });
-        };
+        fdump!(
+            bus,
+            scope,
+            "unique csv",
+            uniq_path,
+            write_uniqs,
+            g_lvl,
+            csv::Writer::from_writer,
+        );
 
-        if let Some(p) = json_path {
-            let recv = bus.add_rx();
-
-            scope.spawn(|_| {
-                if path_stdout(&p) {
-                    json_write(recv, io::stdout().lock(), false)
-                } else if is_gz(&p) {
-                    json_write(
-                        recv,
-                        flate2::write::GzEncoder::new(
-                            BufWriter::new(File::create(p).expect("Couldn't create the json file")),
-                            g_lvl,
-                        ),
-                        false,
-                    );
-                } else {
-                    json_write(
-                        recv,
-                        BufWriter::new(File::create(p).expect("Couldn't create the json file")),
-                        false,
-                    );
-                };
-            });
-        };
-
-        if let Some(p) = yaml_path {
-            let recv = bus.add_rx();
-
-            scope.spawn(|_| {
-                if path_stdout(&p) {
-                    yaml_write(recv, io::stdout().lock())
-                } else if is_gz(&p) {
-                    yaml_write(
-                        recv,
-                        flate2::write::GzEncoder::new(
-                            BufWriter::new(File::create(p).expect("Couldn't create the yaml file")),
-                            g_lvl,
-                        ),
-                    );
-                } else {
-                    yaml_write(
-                        recv,
-                        BufWriter::new(File::create(p).expect("Couldn't create the yaml file")),
-                    );
-                };
-            });
-        };
-
-        if let Some(p) = uniq_path {
-            let recv = bus.add_rx();
-
-            scope.spawn(|_| {
-                if path_stdout(&p) {
-                    write_uniqs(recv, csv::Writer::from_writer(io::stdout().lock()));
-                } else if is_gz(&p) {
-                    write_uniqs(
-                        recv,
-                        csv::Writer::from_writer(flate2::write::GzEncoder::new(
-                            BufWriter::new(
-                                File::create(p).expect("Couldn't create the uniques csv file"),
-                            ),
-                            g_lvl,
-                        )),
-                    );
-                } else {
-                    write_uniqs(
-                        recv,
-                        csv::Writer::from_writer(BufWriter::new(
-                            File::create(p).expect("Couldn't create the uniques csv file"),
-                        )),
-                    );
-                };
-            });
-        }
-
-        let wait_dur = Duration::from_millis(1);
+        fdump!(bus, scope, "json", json_path, json_write, g_lvl, identity,);
+        fdump!(bus, scope, "yaml", yaml_path, yaml_write, g_lvl, identity,);
 
         for f in file_paths {
-            let running = Arc::new(std::sync::RwLock::new(true));
+            let running = Arc::new(AtomicBool::new(true));
 
             crossbeam::scope(|fscope| {
-                if individual_csvs {
-                    let f = f.clone();
-                    let mut recv = bus.add_rx();
-                    let running = running.clone();
+                idump!(
+                    individual_csvs,
+                    bus,
+                    fscope,
+                    running,
+                    "csv",
+                    f,
+                    Writer::from_writer,
+                    icsv,
+                );
 
-                    fscope.spawn(move |_| {
-                        let ext = f
-                            .extension()
-                            .map_or_else(|| "csv".to_string(), |e| format!("{e:?}.csv"));
+                idump!(
+                    individual_jsons,
+                    bus,
+                    fscope,
+                    running,
+                    "json",
+                    f,
+                    identity,
+                    ijson,
+                );
 
-                        let mut csv_out = csv::Writer::from_path(f.with_extension(ext))
-                            .expect("Couldn't open a csv writer");
-
-                        'RUNNING: loop {
-                            match recv.recv_timeout(wait_dur) {
-                                Ok(r) => { csv_out.serialize(r) }
-                                    .expect("Couldn't write an entry into a csv"),
-                                Err(e) => match e {
-                                    RecvTimeoutError::Timeout => {
-                                        let r = running.read().unwrap();
-                                        if !*r {
-                                            break 'RUNNING;
-                                        }
-                                    }
-                                    _ => return,
-                                },
-                            }
-                        }
-                    });
-                };
-
-                if individual_jsons {
-                    let f = f.clone();
-                    let mut recv = bus.add_rx();
-                    let running = running.clone();
-
-                    fscope.spawn(move |_| {
-                        let ext = f
-                            .extension()
-                            .map_or_else(|| "json".to_string(), |e| format!("{e:?}.json"));
-
-                        let mut json_out = BufWriter::new(
-                            File::create(f.with_extension(ext))
-                                .expect("Couldn't open a csv writer"),
-                        );
-                        'RUNNING: loop {
-                            match recv.recv_timeout(wait_dur) {
-                                Ok(r) => { serde_json::to_writer(&mut json_out, &r) }
-                                    .expect("Couldn't write an entry into a csv"),
-                                Err(e) => match e {
-                                    RecvTimeoutError::Timeout => {
-                                        let r = running.read().unwrap();
-                                        if !*r {
-                                            break 'RUNNING;
-                                        }
-                                        thread::yield_now();
-                                    }
-                                    _ => return,
-                                },
-                            }
-                        }
-                    });
-                };
-
-                if individual_yamls {
-                    let f = f.clone();
-                    let mut recv = bus.add_rx();
-                    let running = running.clone();
-
-                    fscope.spawn(move |_| {
-                        let ext = f
-                            .extension()
-                            .map_or_else(|| "yaml".to_string(), |e| format!("{e:?}.yaml"));
-
-                        let mut yaml_out = BufWriter::new(
-                            File::create(f.with_extension(ext))
-                                .expect("Couldn't open a csv writer"),
-                        );
-                        'RUNNING: loop {
-                            match recv.recv_timeout(wait_dur) {
-                                Ok(r) => { serde_yaml::to_writer(&mut yaml_out, &r) }
-                                    .expect("Couldn't write an entry into a csv"),
-                                Err(e) => match e {
-                                    RecvTimeoutError::Timeout => {
-                                        let r = running.read().unwrap();
-                                        if !*r {
-                                            break 'RUNNING;
-                                        }
-                                        thread::yield_now();
-                                    }
-                                    _ => return,
-                                },
-                            }
-                        }
-                    });
-                };
-
-                let path = f.to_string_lossy().into_owned();
+                idump!(
+                    individual_yamls,
+                    bus,
+                    fscope,
+                    running,
+                    "yaml",
+                    f,
+                    identity,
+                    iyaml,
+                );
 
                 match file_parser::parse_file(&f, &mut bus) {
-                    Ok(_) => info!("Finished parsing {}", path),
-                    Err(e) => error!("Couldn't parse '{}': {}", path, e),
+                    Ok(_) => info!("Finished parsing {}", f.display()),
+                    Err(e) => error!("Couldn't parse '{}': {}", f.display(), e),
                 };
 
-                {
-                    let mut r = running.write().unwrap();
-                    *r = false;
-                }
+                running.store(false, Ordering::Release);
             })
             .expect("Couldn't close all the threads");
         }
@@ -421,13 +396,17 @@ fn watch(opts: opts::Watch) -> Result<()> {
     }
 
     crossbeam::scope(|fscope| {
-        let mut bus: Bus<Arc<Record>> = Bus::new(512);
+        let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
-        fscope.spawn(move |_| match opts.format {
-            opts::WatchFormat::Csv => csv_write(rec_recv, csv::Writer::from_writer(io::stdout())),
-            opts::WatchFormat::Json => json_write(rec_recv, io::stdout(), opts.pretty),
-            opts::WatchFormat::Yaml => yaml_write(rec_recv, io::stdout()),
+        fscope.spawn(move |_| {
+            let out = io::stdout().lock();
+
+            match opts.format {
+                opts::WatchFormat::Csv => csv_write(rec_recv, csv::Writer::from_writer(out), false),
+                opts::WatchFormat::Json => json_write(rec_recv, out, opts.pretty),
+                opts::WatchFormat::Yaml => yaml_write(rec_recv, out, false),
+            }
         });
 
         for path in recv {
