@@ -377,9 +377,13 @@ fn watch(opts: opts::Watch) -> Result<()> {
         move |result: DebounceEventResult| match result {
             Ok(events) => events.iter().for_each(|event| {
                 if event.kind.is_create() {
-                    if let Some(path) = event.paths.first() {
-                        if let Err(err) = send.send_timeout(path.clone(), Duration::from_secs(1)) {
-                            error!("Error processing created file {}: {err}", path.display());
+                    for path in event.paths.iter() {
+                        if path.exists() {
+                            if let Err(err) =
+                                send.send_timeout(path.clone(), Duration::from_secs(1))
+                            {
+                                error!("Error processing created file {}: {err}", path.display());
+                            }
                         }
                     }
                 }
