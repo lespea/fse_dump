@@ -13,6 +13,7 @@ use flate2::read::MultiGzDecoder;
 use crate::{record::Record, version};
 
 pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
+    info!("Parsing {}", in_file.display());
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
 
     loop {
