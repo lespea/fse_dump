@@ -369,6 +369,14 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     use crate::file_parser::parse_file;
 
+    env_logger::Builder::new()
+        .filter(None, LevelFilter::Info)
+        .write_style(WriteStyle::Always)
+        .target(Target::Stderr)
+        .init();
+
+    color_eyre::install()?;
+
     let (send, recv) = crossbeam_channel::bounded(128);
 
     let mut debouncer = new_debouncer(
