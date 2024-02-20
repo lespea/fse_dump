@@ -428,6 +428,7 @@ dependencies = [
  "mimalloc",
  "notify",
  "notify-debouncer-full",
+ "regex",
  "serde",
  "serde-hex",
  "serde_derive",
