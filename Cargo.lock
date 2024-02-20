@@ -426,6 +426,7 @@ dependencies = [
  "hashbrown",
  "log",
  "mimalloc",
+ "notify",
  "notify-debouncer-full",
  "serde",
  "serde-hex",
