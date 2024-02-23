@@ -52,6 +52,10 @@ pub struct Watch {
     /// The dirs to watch
     #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub watch_dirs: Vec<PathBuf>,
+
+    /// Use polling (performance issues only use if the normal watcher doesn't work)
+    #[arg(long)]
+    pub poll: bool,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
