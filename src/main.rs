@@ -380,9 +380,9 @@ fn generate(gen: Generate) -> Result<()> {
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
     use notify_debouncer_full::{
-        new_debouncer,
+        new_debouncer_opt,
         notify::{RecursiveMode, Watcher},
-        DebounceEventResult,
+        DebounceEventResult, FileIdMap,
     };
     use regex::bytes::Regex;
 
@@ -402,34 +402,77 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     let (send, recv) = crossbeam_channel::bounded(128);
 
-    let mut debouncer = new_debouncer(
-        Duration::from_secs(2),
-        None,
-        move |result: DebounceEventResult| match result {
-            Ok(events) => events.iter().for_each(|event| {
-                if event.kind.is_create() {
-                    for path in event.paths.iter() {
-                        if path.exists() {
-                            if let Err(err) =
-                                send.send_timeout(path.clone(), Duration::from_secs(1))
-                            {
-                                error!("Error processing created file {}: {err}", path.display());
+    let debounce_time = Duration::from_secs(2);
+
+    if opts.poll {
+        let mut debouncer = new_debouncer_opt::<_, notify::PollWatcher, FileIdMap>(
+            debounce_time,
+            None,
+            move |result: DebounceEventResult| match result {
+                Ok(events) => events.iter().for_each(|event| {
+                    if event.kind.is_create() {
+                        for path in event.paths.iter() {
+                            if path.exists() {
+                                if let Err(err) =
+                                    send.send_timeout(path.clone(), Duration::from_secs(1))
+                                {
+                                    error!(
+                                        "Error processing created file {}: {err}",
+                                        path.display()
+                                    );
+                                }
                             }
                         }
                     }
-                }
-            }),
-            Err(errors) => errors
-                .iter()
-                .for_each(|error| error!("Watch error: {error:?}")),
-        },
-    )?;
+                }),
+                Err(errors) => errors
+                    .iter()
+                    .for_each(|error| error!("Watch error: {error:?}")),
+            },
+            FileIdMap::new(),
+            notify::Config::default().with_poll_interval(Duration::from_secs(2)),
+        )?;
 
-    for path in opts.watch_dirs {
-        info!("Watching {}", path.display());
-        debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
-        debouncer.cache().add_root(&path, RecursiveMode::Recursive);
-    }
+        for path in opts.watch_dirs {
+            info!("Watching {}", path.display());
+            debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
+            debouncer.cache().add_root(&path, RecursiveMode::Recursive);
+        }
+    } else {
+        let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
+            debounce_time,
+            None,
+            move |result: DebounceEventResult| match result {
+                Ok(events) => events.iter().for_each(|event| {
+                    if event.kind.is_create() {
+                        for path in event.paths.iter() {
+                            if path.exists() {
+                                if let Err(err) =
+                                    send.send_timeout(path.clone(), Duration::from_secs(1))
+                                {
+                                    error!(
+                                        "Error processing created file {}: {err}",
+                                        path.display()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }),
+                Err(errors) => errors
+                    .iter()
+                    .for_each(|error| error!("Watch error: {error:?}")),
+            },
+            FileIdMap::new(),
+            notify::Config::default(),
+        )?;
+
+        for path in opts.watch_dirs {
+            info!("Watching {}", path.display());
+            debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
+            debouncer.cache().add_root(&path, RecursiveMode::Recursive);
+        }
+    };
 
     crossbeam::scope(|fscope| {
         let mut bus = new_bus();
