@@ -92,13 +92,21 @@ pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
         combo.insert(0, FlagStrs::default());
 
         for (alt, num) in ALT_FLAGS.iter() {
-            combo.insert(
+            if let Some(old) = combo.insert(
                 *num,
                 FlagStrs {
-                    norm: base.get(num).copied().unwrap_or_default(),
+                    norm: base.remove(num).unwrap_or_default(),
                     alt,
                 },
-            );
+            ) {
+                panic!("Dupe key? {num}/{old:?}")
+            }
+        }
+
+        for (num, b) in base.into_iter() {
+            if let Some(old) = combo.insert(num, FlagStrs { norm: b, alt: "" }) {
+                panic!("Dupe key? {num}/{old:?}")
+            }
         }
 
         RwLock::new(combo)
