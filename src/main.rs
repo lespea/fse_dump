@@ -379,6 +379,8 @@ fn generate(gen: Generate) -> Result<()> {
 
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
+    use std::mem;
+
     use notify_debouncer_full::{
         new_debouncer_opt,
         notify::{RecursiveMode, Watcher},
@@ -438,6 +440,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
             debouncer.cache().add_root(&path, RecursiveMode::Recursive);
         }
+
+        mem::forget(debouncer);
     } else {
         let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
             debounce_time,
@@ -472,6 +476,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
             debouncer.cache().add_root(&path, RecursiveMode::Recursive);
         }
+
+        mem::forget(debouncer);
     };
 
     crossbeam::scope(|fscope| {
