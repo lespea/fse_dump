@@ -12,35 +12,106 @@ files from the '/.fseventsd/' on a live system or FSEvents files extracted from 
 ## Usage
 
 ```
-USAGE:
-    fse_dump [FLAGS] [OPTIONS] <files>...
+Usage: fse_dump <COMMAND>
 
-FLAGS:
-        --csvs       If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
-    -h, --help       Prints help information
-        --jsons      If every fse record file we find should be dumped to a json "next" to it (filename + .json)
-    -V, --version    Prints version information
+Commands:
+  dump      Dump the known net defs
+  generate  Outputs shell completion for fish
+  watch     Watch for new fse files, parse them, and write them to the desired output
+  help      Print this message or the help of the given subcommand(s)
 
-OPTIONS:
-    -c, --csv <csv>           If we should dump the combined records into a single csv.
-                              
-                              The records will be dumped in the order that they're given on the command line (any dir
-                              that is given is expanded to the record files within).
-                              
-                              If parallel is enabled than there is no guarantee of order (even within a single file)
-    -j, --json <json>         If we should dump the combined records into a single json.
-                              
-                              The records will be dumped in the order that they're given on the command line (any dir
-                              that is given is expanded to the record files within).
-                              
-                              If parallel is enabled than there is no guarantee of order (even within a single file)
-    -u, --unique <uniques>    If we should dump the unique paths/operations found into a csv
-                              
-                              We'll combine all of the operations for each path so there is one entry per path
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
 
-ARGS:
-    <files>...    The fs event files that should be parsed. If any arg is a directory then any file within that has
-                  a filename consisting solely of hex chars will be considered a file to parse
+#### Dump
+
+```
+Usage: fse_dump dump [OPTIONS] [FILES]...
+
+Arguments:
+  [FILES]...
+          The fs event files that should be parsed. If any arg is a directory then any file within that has a filename consisting solely of hex chars will be considered a file to parse
+          
+          [default: /System/Volumes/Data/.fseventsd/]
+
+Options:
+      --csvs
+          If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
+
+      --jsons
+          If every fse record file we find should be dumped to a json "next" to it (filename + .json)
+
+      --yamls
+          If every fse record file we find should be dumped to a yaml "next" to it (filename + .yaml)
+
+  -c, --csv <CSV>
+          If we should dump the combined records into a single csv.
+          
+          The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
+          
+          If parallel is enabled than there is no guarantee of order (even within a single file)
+
+  -j, --json <JSON>
+          If we should dump the combined records into a single json.
+          
+          The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
+          
+          If parallel is enabled than there is no guarantee of order (even within a single file)
+
+  -y, --yaml <YAML>
+          If we should dump the combined records into a single yaml.
+          
+          The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
+          
+          If parallel is enabled than there is no guarantee of order (even within a single file)
+
+  -u, --uniques <UNIQUES>
+          If we should dump the unique paths/operations found into a csv
+          
+          We'll combine all of the operations for each path so there is one entry per path
+
+  -l, --level <LEVEL>
+          The level we should compress the output as; 0-9
+          
+          [default: 7]
+
+  -d, --days <PULL_DAYS>
+          How many days we should pull (based off the file mod time)
+          
+          [default: 90]
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+#### Watch
+
+```
+Usage: fse_dump watch [OPTIONS] [WATCH_DIRS]...
+
+Arguments:
+  [WATCH_DIRS]...  The dirs to watch [default: /System/Volumes/Data/.fseventsd/]
+
+Options:
+  -f, --format <FORMAT>  The format the parsed files should be output to [default: json] [possible values: csv, json, yaml]
+  -p, --pretty           If the outupt should be "pretty" formatted (multi-line)
+      --filter <FILTER>  Filter events based on the path
+      --poll             Use polling (performance issues only use if the normal watcher doesn't work)
+  -h, --help             Print help
+```
+
+#### Gen
+
+```
+Usage: fse_dump generate <SHELL>
+
+Arguments:
+  <SHELL>  If every fse record file we find should be dumped to a csv "next" to it (filename + .csv) [possible values: bash, elvish, fish, powershell, zsh]
+
+Options:
+  -h, --help  Print help
 ```
 
 ## References
