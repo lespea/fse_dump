@@ -55,12 +55,16 @@ Options:
 
           If parallel is enabled than there is no guarantee of order (even within a single file)
 
+          If the path ends in `.gz` it will be gzip compressed
+
   -j, --json <JSON>
           If we should dump the combined records into a single json.
 
           The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
 
           If parallel is enabled than there is no guarantee of order (even within a single file)
+
+          If the path ends in `.gz` it will be gzip compressed
 
   -y, --yaml <YAML>
           If we should dump the combined records into a single yaml.
@@ -69,10 +73,14 @@ Options:
 
           If parallel is enabled than there is no guarantee of order (even within a single file)
 
+          If the path ends in `.gz` it will be gzip compressed
+
   -u, --uniques <UNIQUES>
           If we should dump the unique paths/operations found into a csv
 
           We'll combine all of the operations for each path so there is one entry per path
+
+          If the path ends in `.gz` it will be gzip compressed
 
   -l, --level <LEVEL>
           The level we should compress the output as; 0-9
