@@ -15,16 +15,16 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Dump the known net defs
+    /// Dump fsevents file into the wanted output files/format
     Dump(Dump),
-
-    /// Outputs shell completion for fish
-    #[clap(aliases = &["gen"])]
-    Generate(Generate),
 
     /// Watch for new fse files, parse them, and write them to the desired output
     #[cfg(feature = "watch")]
     Watch(Watch),
+
+    /// Outputs shell completions for the desired shell
+    #[clap(aliases = &["gen"])]
+    Generate(Generate),
 }
 
 #[derive(Debug, Args)]
@@ -86,6 +86,8 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
+    ///
+    /// If the path ends in `.gz` it will be gzip compressed
     #[arg(short, long)]
     pub csv: Option<PathBuf>,
 
@@ -95,6 +97,8 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
+    ///
+    /// If the path ends in `.gz` it will be gzip compressed
     #[arg(short, long)]
     pub json: Option<PathBuf>,
 
@@ -104,12 +108,16 @@ pub struct Dump {
     /// that is given is expanded to the record files within).
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
+    ///
+    /// If the path ends in `.gz` it will be gzip compressed
     #[arg(short, long)]
     pub yaml: Option<PathBuf>,
 
     /// If we should dump the unique paths/operations found into a csv
     ///
     /// We'll combine all of the operations for each path so there is one entry per path
+    ///
+    /// If the path ends in `.gz` it will be gzip compressed
     #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 

@@ -1,9 +1,11 @@
 # Overview
 
-FSEvents files are written to disk by macOS APIs and contain historical records of file system
-activity that occurred for a particular volume. They can be found on devices running macOS and
-devices that were plugged in to a device running macOS. _fse_dump_ can be used to parse FSEvents
-files from the '/.fseventsd/' on a live system or FSEvents files extracted from an image.
+FSEvents files are written to disk by macOS APIs and contain historical records
+of file system activity that occurred for a particular volume. They can be
+found on devices running macOS and devices that were plugged in to a device
+running macOS. _fse_dump_ can be used to parse FSEvents files from the
+`/System/Volumes/Data/.fseventsd/"` on a live system or FSEvents files
+extracted from an image.
 
 ![Github CI](https://github.com/lespea/fse_dump/actions/workflows/ci.yml/badge.svg)
 ![Github Release](https://github.com/lespea/fse_dump/actions/workflows/release.yml/badge.svg)
@@ -33,7 +35,7 @@ Usage: fse_dump dump [OPTIONS] [FILES]...
 Arguments:
   [FILES]...
           The fs event files that should be parsed. If any arg is a directory then any file within that has a filename consisting solely of hex chars will be considered a file to parse
-          
+
           [default: /System/Volumes/Data/.fseventsd/]
 
 Options:
@@ -48,38 +50,38 @@ Options:
 
   -c, --csv <CSV>
           If we should dump the combined records into a single csv.
-          
+
           The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
-          
+
           If parallel is enabled than there is no guarantee of order (even within a single file)
 
   -j, --json <JSON>
           If we should dump the combined records into a single json.
-          
+
           The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
-          
+
           If parallel is enabled than there is no guarantee of order (even within a single file)
 
   -y, --yaml <YAML>
           If we should dump the combined records into a single yaml.
-          
+
           The records will be dumped in the order that they're given on the command line (any dir that is given is expanded to the record files within).
-          
+
           If parallel is enabled than there is no guarantee of order (even within a single file)
 
   -u, --uniques <UNIQUES>
           If we should dump the unique paths/operations found into a csv
-          
+
           We'll combine all of the operations for each path so there is one entry per path
 
   -l, --level <LEVEL>
           The level we should compress the output as; 0-9
-          
+
           [default: 7]
 
   -d, --days <PULL_DAYS>
           How many days we should pull (based off the file mod time)
-          
+
           [default: 90]
 
   -h, --help
