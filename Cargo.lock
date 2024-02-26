@@ -408,7 +408,7 @@ dependencies = [
 
 [[package]]
 name = "fse_dump"
-version = "1.11.3"
+version = "2.0.0"
 dependencies = [
  "bus",
  "byteorder",
