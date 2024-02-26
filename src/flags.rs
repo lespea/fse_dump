@@ -30,6 +30,7 @@ static FLAGS: [(&str, u32); 21] = [
 ];
 
 // Alt flags from https://github.com/ydkhatri/mac_apt/blob/master/plugins/fsevents.py
+#[cfg(feature = "alt_flags")]
 static ALT_FLAGS: [(&str, u32); 22] = [
     // ("None", 0x_0000_0000),
     ("Created", 0x_0000_0001),
@@ -69,6 +70,7 @@ static ALT_FLAGS: [(&str, u32); 22] = [
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FlagStrs {
     pub norm: &'static str,
+    #[cfg(feature = "alt_flags")]
     pub alt: &'static str,
 }
 
@@ -91,6 +93,7 @@ pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
         // We'll probably need this
         combo.insert(0, FlagStrs::default());
 
+        #[cfg(feature = "alt_flags")]
         for (alt, num) in ALT_FLAGS.iter() {
             if let Some(old) = combo.insert(
                 *num,
@@ -104,7 +107,14 @@ pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
         }
 
         for (num, b) in base.into_iter() {
-            if let Some(old) = combo.insert(num, FlagStrs { norm: b, alt: "" }) {
+            if let Some(old) = combo.insert(
+                num,
+                FlagStrs {
+                    norm: b,
+                    #[cfg(feature = "alt_flags")]
+                    alt: "",
+                },
+            ) {
                 panic!("Dupe key? {num}/{old:?}")
             }
         }
@@ -129,7 +139,10 @@ fn bits_to_str(bits: u32) -> FlagStrs {
         }
     }
 
+    #[cfg(feature = "alt_flags")]
     let mut alt = String::with_capacity(500);
+
+    #[cfg(feature = "alt_flags")]
     for (name, num) in ALT_FLAGS.iter() {
         if bits & *num == *num {
             if !alt.is_empty() {
@@ -141,11 +154,15 @@ fn bits_to_str(bits: u32) -> FlagStrs {
 
     // Since these are long lived we might as well shrink this down to what's needed
     norm.shrink_to_fit();
-    alt.shrink_to_fit();
-    debug!(target: "flags", "Bits {} == {}/{}", bits, norm, alt);
+    #[cfg(feature = "alt_flags")]
+    {
+        alt.shrink_to_fit();
+        debug!(target: "flags", "Bits {} == {}/{}", bits, norm, alt);
+    }
 
     FlagStrs {
         norm: Box::leak(norm.into_boxed_str()),
+        #[cfg(feature = "alt_flags")]
         alt: Box::leak(alt.into_boxed_str()),
     }
 }
@@ -185,6 +202,7 @@ mod tests {
             assert_eq!(bits_to_str(*flag).norm, *name);
             assert_eq!(bits_to_str(*flag).norm, *name);
         }
+        #[cfg(feature = "alt_flags")]
         for (name, flag) in ALT_FLAGS.iter() {
             assert_eq!(bits_to_str(*flag).alt, *name);
             assert_eq!(bits_to_str(*flag).alt, *name);

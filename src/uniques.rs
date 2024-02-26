@@ -20,6 +20,7 @@ impl UniqueCounts {
             path,
             counts: self.counts,
             flags: flags.norm,
+            #[cfg(feature = "alt_flags")]
             alt_flags: flags.alt,
         }
     }
@@ -30,5 +31,6 @@ pub struct UniqueOut {
     path: String,
     counts: u64,
     flags: &'static str,
+    #[cfg(feature = "alt_flags")]
     alt_flags: &'static str,
 }
