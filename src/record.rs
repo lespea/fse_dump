@@ -10,6 +10,7 @@ pub struct Record {
     #[serde(skip_serializing)]
     pub flag: u32,
     pub flags: &'static str,
+    #[cfg(feature = "alt_flags")]
     pub alt_flags: &'static str,
     #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub node_id: Option<u64>,

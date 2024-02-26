@@ -126,6 +126,7 @@ where
                     event_id,
                     flag,
                     flags: flags.norm,
+                    #[cfg(feature = "alt_flags")]
                     alt_flags: flags.alt,
                     node_id,
                     #[cfg(feature = "extra_id")]

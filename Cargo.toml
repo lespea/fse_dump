@@ -21,6 +21,7 @@ maintenance = { status = "actively-developed" }
 [features]
 default = ["hex", "extra_id", "watch"]
 
+alt_flags = []
 extra_id = []
 hex = ["dep:serde-hex"]
 watch = ["dep:notify-debouncer-full"]
