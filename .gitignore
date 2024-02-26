@@ -7,3 +7,4 @@
 **/*.rs.bk
 .idea/
 !testfiles/**
+!dprint.json

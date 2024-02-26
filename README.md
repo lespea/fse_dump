@@ -1,15 +1,16 @@
 # Overview
+
 FSEvents files are written to disk by macOS APIs and contain historical records of file system
 activity that occurred for a particular volume. They can be found on devices running macOS and
-devices that were plugged in to a device running macOS. *fse_dump* can be used to parse FSEvents
+devices that were plugged in to a device running macOS. _fse_dump_ can be used to parse FSEvents
 files from the '/.fseventsd/' on a live system or FSEvents files extracted from an image.
-
 
 ![Github CI](https://github.com/lespea/fse_dump/actions/workflows/ci.yml/badge.svg)
 ![Github Release](https://github.com/lespea/fse_dump/actions/workflows/release.yml/badge.svg)
 [![Crates.io](https://img.shields.io/crates/v/fse_dump.svg)](https://crates.io/crates/fse_dump)
 
 ## Usage
+
 ```
 USAGE:
     fse_dump [FLAGS] [OPTIONS] <files>...
@@ -43,15 +44,16 @@ ARGS:
 ```
 
 ## References
-* http://nicoleibrahim.com/apple-fsevents-forensics/
-* https://github.com/dlcowen/FSEventsParser
+
+- http://nicoleibrahim.com/apple-fsevents-forensics/
+- https://github.com/dlcowen/FSEventsParser
 
 ## License
 
 Licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 
