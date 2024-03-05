@@ -2,7 +2,7 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "2.0.1"
+version = "2.0.2"
 edition = "2021"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
@@ -30,25 +30,25 @@ watch = ["dep:notify-debouncer-full"]
 bus = "2"
 byteorder = "1"
 clap = { version = "4", features = ["derive"] }
-clap_complete = "4.5"
-color-eyre = { version = "0.6", default-features = false }
+clap_complete = "4"
+color-eyre = { version = "0", default-features = false }
 crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
 flate2 = { version = "1", features = ["cloudflare_zlib"], default-features = false }
-hashbrown = "0.14"
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
-mimalloc = { version = "0.1", features = ["secure"] }
-notify = { version = "6.1.1", default-features = false, features = ["macos_kqueue"] }
-notify-debouncer-full = { version = "0.3", optional = true }
-regex = "1.10.3"
+hashbrown = "0"
+log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
+mimalloc = { version = "0", features = ["secure"] }
+notify = { version = "6", default-features = false, features = ["macos_kqueue"] }
+notify-debouncer-full = { version = "0", optional = true }
+regex = "1"
 serde = { version = "1", features = ["rc"] }
-serde-hex = { version = "0.1", optional = true }
+serde-hex = { version = "0", optional = true }
 serde_derive = "1"
 serde_json = "1"
-serde_yaml = "0.9"
-time = { version = "0.3", features = ["local-offset"] }
+serde_yaml = "0"
+time = { version = "0", features = ["local-offset"] }
 walkdir = "2"
 
 [profile.dev]
