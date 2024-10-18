@@ -2,7 +2,7 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "2.0.8"
+version = "2.0.9"
 edition = "2021"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
