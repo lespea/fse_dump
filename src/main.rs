@@ -64,6 +64,13 @@ fn is_gz(path: &Path) -> bool {
     }
 }
 
+fn is_zstd(path: &Path) -> bool {
+    match path.extension() {
+        None => false,
+        Some(e) => e == "zstd" || e == "zst",
+    }
+}
+
 fn csv_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
 where
     I: Write,
@@ -197,6 +204,17 @@ macro_rules! fdump {
                                         BufWriter::new(f),
                                         $g_lvl,
                                     )),
+                                    NO_FILTER,
+                                    false,
+                                );
+                            } else if is_zstd(&p) {
+                                $proc_f(
+                                    recv,
+                                    $creater(
+                                        zstd::stream::write::Encoder::new(f, 10)
+                                            .unwrap()
+                                            .auto_finish(),
+                                    ),
                                     NO_FILTER,
                                     false,
                                 );
