@@ -382,9 +382,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
     use std::mem;
 
     use notify_debouncer_full::{
-        new_debouncer_opt,
-        notify::{RecursiveMode, Watcher},
-        DebounceEventResult, FileIdMap,
+        new_debouncer_opt, notify::RecursiveMode, DebounceEventResult, FileIdMap,
     };
     use regex::bytes::Regex;
 
@@ -437,8 +435,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
         for path in opts.watch_dirs {
             info!("Watching {}", path.display());
-            debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
-            debouncer.cache().add_root(&path, RecursiveMode::Recursive);
+            debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
         mem::forget(debouncer);
@@ -473,8 +470,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
         for path in opts.watch_dirs {
             info!("Watching {}", path.display());
-            debouncer.watcher().watch(&path, RecursiveMode::Recursive)?;
-            debouncer.cache().add_root(&path, RecursiveMode::Recursive);
+            debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
         mem::forget(debouncer);

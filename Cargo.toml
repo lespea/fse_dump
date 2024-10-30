@@ -40,7 +40,7 @@ flate2 = { version = "1", features = ["cloudflare_zlib"], default-features = fal
 hashbrown = "0"
 log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
 mimalloc = { version = "0", features = ["secure"] }
-notify = { version = "6", default-features = false, features = ["macos_kqueue"] }
+notify = { version = "7", default-features = false, features = ["macos_kqueue"] }
 notify-debouncer-full = { version = "0", optional = true }
 regex = "1"
 serde = { version = "1", features = ["rc"] }
