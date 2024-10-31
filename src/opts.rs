@@ -121,10 +121,6 @@ pub struct Dump {
     #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 
-    /// The level we should compress the output as; 0-9
-    #[arg(short, long, default_value = "7")]
-    pub level: u32,
-
     /// How many days we should pull (based off the file mod time)
     #[arg(short = 'd', long = "days", default_value = "90")]
     pub pull_days: u32,
@@ -133,6 +129,70 @@ pub struct Dump {
     /// that has a filename consisting solely of hex chars will be considered a file to parse
     #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub files: Vec<PathBuf>,
+
+    /// The compression options
+    #[clap(flatten)]
+    pub compress_opts: CompressOpts,
+}
+
+#[derive(Clone, Copy, Debug, Args)]
+pub struct CompressOpts {
+    /// The level we should compress the gzip output as; 0-9
+    #[arg(long, default_value = "7")]
+    pub glevel: u32,
+
+    /// The level we should compress the zstd output as; 0-20
+    #[cfg(feature = "zstd")]
+    #[arg(long, default_value = "10")]
+    pub zlevel: u32,
+
+    /// How many threads to use for zstd compression (0 disables it)
+    #[cfg(feature = "zstd")]
+    #[arg(long, default_value = "2")]
+    pub zthreads: u16,
+
+    /// Force the output file (or stdout) to be gzip
+    #[arg(long)]
+    pub gzip: bool,
+
+    /// Force the output file (or stdout) to be zstd
+    #[cfg(feature = "zstd")]
+    #[arg(long, conflicts_with = "gzip")]
+    pub zstd: bool,
+}
+
+impl CompressOpts {
+    pub fn glvl(&self) -> flate2::Compression {
+        if self.gzip {
+            flate2::Compression::default()
+        } else {
+            flate2::Compression::new(self.glevel)
+        }
+    }
+
+    pub fn zlvl(&self) -> i32 {
+        if self.zstd {
+            0
+        } else {
+            self.zlevel as i32
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.glevel > 9 {
+            return Err(eyre!(
+                "The gzip compression level must be between 0 and 9 (inclusive)",
+            ));
+        }
+
+        if self.zlevel > 20 {
+            return Err(eyre!(
+                "The zstd compression level must be between 0 and 20 (inclusive)",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 fn stdout_path(path: &Option<PathBuf>) -> bool {
@@ -159,11 +219,7 @@ impl Dump {
     }
 
     pub fn validate(&self, counts: usize) -> Result<()> {
-        if self.level > 9 {
-            return Err(eyre!(
-                "The compression level must be between 0 and 9 (inclusive)",
-            ));
-        }
+        self.compress_opts.validate()?;
 
         if counts > 1 {
             return Err(eyre!("Can't have more than one file printing to stdout!",));

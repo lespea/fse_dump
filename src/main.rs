@@ -186,7 +186,7 @@ fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
 }
 
 macro_rules! fdump {
-    ( $bus: ident, $scope: ident, $ftype: expr, $path:ident, $proc_f:ident, $g_lvl: ident, $creater:expr, ) => {
+    ( $bus: ident, $scope: ident, $ftype: expr, $path:ident, $proc_f:ident, $c_opt: ident, $creater:expr, ) => {
         if let Some(p) = $path {
             let recv = $bus.add_rx();
 
@@ -208,7 +208,7 @@ macro_rules! fdump {
                                     recv,
                                     $creater(flate2::write::GzEncoder::new(
                                         BufWriter::new(f),
-                                        $g_lvl,
+                                        $c_opt.glvl(),
                                     )),
                                     NO_FILTER,
                                     false,
@@ -216,8 +216,9 @@ macro_rules! fdump {
                             } else if is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    let mut z = zstd::stream::write::Encoder::new(f, 10).unwrap();
-                                    z.multithread(2).unwrap();
+                                    let mut z = zstd::stream::write::Encoder::new(f, $c_opt.zlvl())
+                                        .unwrap();
+                                    z.multithread($c_opt.zthreads as u32).unwrap();
 
                                     $proc_f(recv, $creater(z.auto_finish()), NO_FILTER, false);
                                 }
@@ -313,7 +314,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         ..
     } = opts;
 
-    let g_lvl = flate2::Compression::new(opts.level);
+    let copts = opts.compress_opts;
 
     crossbeam::scope(|scope| {
         let mut bus = new_bus();
@@ -324,7 +325,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
             "csv",
             csv_path,
             csv_write,
-            g_lvl,
+            copts,
             csv::Writer::from_writer,
         );
 
@@ -334,12 +335,12 @@ fn dump(opts: opts::Dump) -> Result<()> {
             "unique csv",
             uniq_path,
             write_uniqs,
-            g_lvl,
+            copts,
             csv::Writer::from_writer,
         );
 
-        fdump!(bus, scope, "json", json_path, json_write, g_lvl, identity,);
-        fdump!(bus, scope, "yaml", yaml_path, yaml_write, g_lvl, identity,);
+        fdump!(bus, scope, "json", json_path, json_write, copts, identity,);
+        fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);
 
         for f in file_paths {
             let running = Arc::new(AtomicBool::new(true));
