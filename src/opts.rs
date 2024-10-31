@@ -164,20 +164,12 @@ pub struct CompressOpts {
 
 impl CompressOpts {
     pub fn glvl(&self) -> flate2::Compression {
-        if self.gzip {
-            flate2::Compression::default()
-        } else {
-            flate2::Compression::new(self.glevel)
-        }
+        flate2::Compression::new(self.glevel)
     }
 
     #[cfg(feature = "zstd")]
     pub fn zlvl(&self) -> i32 {
-        if self.zstd {
-            0
-        } else {
-            self.zlevel as i32
-        }
+        self.zlevel as i32
     }
 
     pub fn validate(&self) -> Result<()> {
