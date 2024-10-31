@@ -57,26 +57,6 @@ fn main() -> Result<()> {
     }
 }
 
-fn is_gz(path: &Path) -> bool {
-    match path.extension() {
-        None => false,
-        Some(e) => e == "gz" || e == "gzip",
-    }
-}
-
-#[cfg(feature = "zstd")]
-fn is_zstd(path: &Path) -> bool {
-    match path.extension() {
-        None => false,
-        Some(e) => e == "zstd" || e == "zst",
-    }
-}
-
-#[cfg(not(feature = "zstd"))]
-const fn is_zstd(_: &Path) -> bool {
-    false
-}
-
 fn csv_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
 where
     I: Write,
@@ -192,7 +172,20 @@ macro_rules! fdump {
 
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
-                    $proc_f(recv, $creater(io::stdout().lock()), NO_FILTER, false);
+                    let out = io::stdout().lock();
+                    if $c_opt.is_gz(&p) {
+                        $proc_f(recv, $creater($c_opt.make_gzip(out)), NO_FILTER, false);
+                    } else if $c_opt.is_zstd(&p) {
+                        #[cfg(feature = "zstd")]
+                        {
+                            $proc_f(recv, $creater($c_opt.make_zstd(out)), NO_FILTER, false);
+                        }
+
+                        #[cfg(not(feature = "zstd"))]
+                        unreachable!("zstd feature not enabled");
+                    } else {
+                        $proc_f(recv, $creater(out), NO_FILTER, false);
+                    }
                 });
             } else {
                 match File::create(&p) {
@@ -203,24 +196,17 @@ macro_rules! fdump {
                     ),
                     Ok(f) => {
                         $scope.spawn(move |_| {
-                            if is_gz(&p) {
+                            if $c_opt.is_gz(&p) {
                                 $proc_f(
                                     recv,
-                                    $creater(flate2::write::GzEncoder::new(
-                                        BufWriter::new(f),
-                                        $c_opt.glvl(),
-                                    )),
+                                    $creater($c_opt.make_gzip(BufWriter::new(f))),
                                     NO_FILTER,
                                     false,
                                 );
-                            } else if is_zstd(&p) {
+                            } else if $c_opt.is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    let mut z = zstd::stream::write::Encoder::new(f, $c_opt.zlvl())
-                                        .unwrap();
-                                    z.multithread($c_opt.zthreads as u32).unwrap();
-
-                                    $proc_f(recv, $creater(z.auto_finish()), NO_FILTER, false);
+                                    $proc_f(recv, $creater($c_opt.make_zstd(f)), NO_FILTER, false);
                                 }
 
                                 #[cfg(not(feature = "zstd"))]

@@ -1,8 +1,9 @@
-use std::{ffi::OsStr, ops::Sub, path::PathBuf, time::SystemTime};
+use std::{ffi::OsStr, io::Write, ops::Sub, path::PathBuf, time::SystemTime};
 
 use clap::{value_parser, Args, Parser, Subcommand};
 use clap_complete::Shell;
 use color_eyre::{eyre::eyre, Result};
+use std::path::Path;
 use time::OffsetDateTime;
 
 /// Utility to dump the fsevent files on OSX
@@ -170,6 +171,7 @@ impl CompressOpts {
         }
     }
 
+    #[cfg(feature = "zstd")]
     pub fn zlvl(&self) -> i32 {
         if self.zstd {
             0
@@ -185,6 +187,7 @@ impl CompressOpts {
             ));
         }
 
+        #[cfg(feature = "zstd")]
         if self.zlevel > 20 {
             return Err(eyre!(
                 "The zstd compression level must be between 0 and 20 (inclusive)",
@@ -192,6 +195,45 @@ impl CompressOpts {
         }
 
         Ok(())
+    }
+
+    pub fn is_gz(&self, path: &Path) -> bool {
+        self.gzip
+            || match path.extension() {
+                None => false,
+                Some(e) => e == "gz" || e == "gzip",
+            }
+    }
+
+    #[cfg(feature = "zstd")]
+    pub fn is_zstd(&self, path: &Path) -> bool {
+        self.zstd
+            || match path.extension() {
+                None => false,
+                Some(e) => e == "zstd" || e == "zst",
+            }
+    }
+
+    #[cfg(not(feature = "zstd"))]
+    pub const fn is_zstd(&self, _: &Path) -> bool {
+        false
+    }
+
+    pub fn make_gzip<W>(&self, w: W) -> flate2::write::GzEncoder<W>
+    where
+        W: Write,
+    {
+        flate2::write::GzEncoder::new(w, self.glvl())
+    }
+
+    #[cfg(feature = "zstd")]
+    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::AutoFinishEncoder<'a, W>
+    where
+        W: Write,
+    {
+        let mut z = zstd::stream::write::Encoder::new(w, self.zlvl()).unwrap();
+        z.multithread(self.zthreads as u32).unwrap();
+        z.auto_finish()
     }
 }
 
