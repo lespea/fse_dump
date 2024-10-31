@@ -139,7 +139,7 @@ pub struct Dump {
 #[derive(Clone, Copy, Debug, Args)]
 pub struct CompressOpts {
     /// The level we should compress the gzip output as; 0-9
-    #[arg(long, default_value = "7")]
+    #[arg(short = 'l', alias = "level", long, default_value = "7")]
     pub glevel: u32,
 
     /// The level we should compress the zstd output as; 0-20
