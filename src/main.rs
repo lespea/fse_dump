@@ -64,6 +64,19 @@ fn is_gz(path: &Path) -> bool {
     }
 }
 
+#[cfg(feature = "zstd")]
+fn is_zstd(path: &Path) -> bool {
+    match path.extension() {
+        None => false,
+        Some(e) => e == "zstd" || e == "zst",
+    }
+}
+
+#[cfg(not(feature = "zstd"))]
+const fn is_zstd(_: &Path) -> bool {
+    false
+}
+
 fn csv_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
 where
     I: Write,
@@ -200,6 +213,17 @@ macro_rules! fdump {
                                     NO_FILTER,
                                     false,
                                 );
+                            } else if is_zstd(&p) {
+                                #[cfg(feature = "zstd")]
+                                {
+                                    let mut z = zstd::stream::write::Encoder::new(f, 10).unwrap();
+                                    z.multithread(2).unwrap();
+
+                                    $proc_f(recv, $creater(z.auto_finish()), NO_FILTER, false);
+                                }
+
+                                #[cfg(not(feature = "zstd"))]
+                                unreachable!("zstd feature not enabled");
                             } else {
                                 $proc_f(recv, $creater(BufWriter::new(f)), NO_FILTER, false);
                             };
