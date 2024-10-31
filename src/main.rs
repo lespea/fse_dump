@@ -79,7 +79,7 @@ where
     if pretty {
         for rec in recv {
             if filter.filter(&rec) {
-                if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
+                if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
                     error!("Couldn't serialize json: {err}");
                 }
                 if let Err(err) = writeln!(writer) {
@@ -90,7 +90,7 @@ where
     } else {
         for rec in recv {
             if filter.filter(&rec) {
-                if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
+                if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
                     error!("Couldn't serialize json: {err}");
                 }
                 if let Err(err) = writeln!(writer) {
