@@ -52,7 +52,7 @@ serde_json = "1"
 serde_yaml = "0"
 time = { version = "0", features = ["local-offset"] }
 walkdir = "2"
-zstd = { version = "0", optional = true }
+zstd = { version = "0", features = ["zstdmt"], optional = true }
 
 [profile.dev]
 opt-level = 1

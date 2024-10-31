@@ -215,16 +215,12 @@ macro_rules! fdump {
                                 );
                             } else if is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
-                                $proc_f(
-                                    recv,
-                                    $creater(
-                                        zstd::stream::write::Encoder::new(f, 10)
-                                            .unwrap()
-                                            .auto_finish(),
-                                    ),
-                                    NO_FILTER,
-                                    false,
-                                );
+                                {
+                                    let mut z = zstd::stream::write::Encoder::new(f, 10).unwrap();
+                                    z.multithread(2).unwrap();
+
+                                    $proc_f(recv, $creater(z.auto_finish()), NO_FILTER, false);
+                                }
 
                                 #[cfg(not(feature = "zstd"))]
                                 unreachable!("zstd feature not enabled");
