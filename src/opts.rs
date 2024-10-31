@@ -57,6 +57,10 @@ pub struct Watch {
     /// Use polling (performance issues only use if the normal watcher doesn't work)
     #[arg(long)]
     pub poll: bool,
+
+    /// The compression options
+    #[clap(flatten)]
+    pub compress_opts: CompressOpts,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -226,6 +230,29 @@ impl CompressOpts {
         let mut z = zstd::stream::write::Encoder::new(w, self.zlvl()).unwrap();
         z.multithread(self.zthreads as u32).unwrap();
         z.auto_finish()
+    }
+
+    pub fn make_stdout(&self) -> Box<dyn Write> {
+        let out = std::io::stdout().lock();
+
+        #[cfg(feature = "zstd")]
+        let is_zstd = self.zstd;
+        #[cfg(not(feature = "zstd"))]
+        let is_zstd = false;
+
+        if is_zstd {
+            #[cfg(feature = "zstd")]
+            {
+                Box::new(self.make_zstd(out))
+            }
+
+            #[cfg(not(feature = "zstd"))]
+            unreachable!("zstd feature not enabled");
+        } else if self.gzip {
+            Box::new(self.make_gzip(out))
+        } else {
+            Box::new(out)
+        }
     }
 }
 

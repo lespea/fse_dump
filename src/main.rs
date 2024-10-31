@@ -172,26 +172,7 @@ macro_rules! fdump {
 
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
-                    let out = io::stdout().lock();
-
-                    #[cfg(feature = "zstd")]
-                    let is_zstd = $c_opt.zstd;
-                    #[cfg(not(feature = "zstd"))]
-                    let is_zstd = false;
-
-                    if is_zstd {
-                        #[cfg(feature = "zstd")]
-                        {
-                            $proc_f(recv, $creater($c_opt.make_zstd(out)), NO_FILTER, false);
-                        }
-
-                        #[cfg(not(feature = "zstd"))]
-                        unreachable!("zstd feature not enabled");
-                    } else if $c_opt.is_gz(&p) {
-                        $proc_f(recv, $creater($c_opt.make_gzip(out)), NO_FILTER, false);
-                    } else {
-                        $proc_f(recv, $creater(out), NO_FILTER, false);
-                    }
+                    $proc_f(recv, $creater($c_opt.make_stdout()), NO_FILTER, false);
                 });
             } else {
                 match File::create(&p) {
@@ -493,12 +474,15 @@ fn watch(opts: opts::Watch) -> Result<()> {
         mem::forget(debouncer);
     };
 
+    let copts = opts.compress_opts;
+
     crossbeam::scope(|fscope| {
         let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
         fscope.spawn(move |_| {
-            let out = io::stdout().lock();
+            let out = copts.make_stdout();
+
             if let Some(path_rex) = path_rex {
                 let filt = PathFilter { path_rex };
                 match opts.format {
