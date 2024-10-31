@@ -173,9 +173,13 @@ macro_rules! fdump {
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
                     let out = io::stdout().lock();
-                    if $c_opt.is_gz(&p) {
-                        $proc_f(recv, $creater($c_opt.make_gzip(out)), NO_FILTER, false);
-                    } else if $c_opt.is_zstd(&p) {
+
+                    #[cfg(feature = "zstd")]
+                    let is_zstd = $c_opt.zstd;
+                    #[cfg(not(feature = "zstd"))]
+                    let is_zstd = false;
+
+                    if is_zstd {
                         #[cfg(feature = "zstd")]
                         {
                             $proc_f(recv, $creater($c_opt.make_zstd(out)), NO_FILTER, false);
@@ -183,6 +187,8 @@ macro_rules! fdump {
 
                         #[cfg(not(feature = "zstd"))]
                         unreachable!("zstd feature not enabled");
+                    } else if $c_opt.is_gz(&p) {
+                        $proc_f(recv, $creater($c_opt.make_gzip(out)), NO_FILTER, false);
                     } else {
                         $proc_f(recv, $creater(out), NO_FILTER, false);
                     }
