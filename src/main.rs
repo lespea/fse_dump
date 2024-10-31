@@ -57,8 +57,13 @@ fn main() -> Result<()> {
     }
 }
 
-fn csv_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
-where
+fn csv_write<I, F>(
+    recv: BusReader<Arc<Record>>,
+    mut writer: Writer<I>,
+    filter: F,
+    _: bool,
+    flush_all: bool,
+) where
     I: Write,
     F: RecordFilter,
 {
@@ -67,12 +72,22 @@ where
             if let Err(err) = writer.serialize(rec) {
                 error!("Couldn't serialize csv: {err}");
             }
+            if flush_all {
+                if let Err(err) = writer.flush() {
+                    error!("Couldn't flush csv: {err}");
+                }
+            }
         }
     }
 }
 
-fn json_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: I, filter: F, pretty: bool)
-where
+fn json_write<I, F>(
+    recv: BusReader<Arc<Record>>,
+    mut writer: I,
+    filter: F,
+    pretty: bool,
+    flush_all: bool,
+) where
     I: Write,
     F: RecordFilter,
 {
@@ -85,6 +100,11 @@ where
                 if let Err(err) = writeln!(writer) {
                     error!("Couldn't append newline: {err}");
                 }
+                if flush_all {
+                    if let Err(err) = writer.flush() {
+                        error!("Couldn't flush csv: {err}");
+                    }
+                }
             }
         }
     } else {
@@ -96,13 +116,23 @@ where
                 if let Err(err) = writeln!(writer) {
                     error!("Couldn't append newline: {err}");
                 }
+                if flush_all {
+                    if let Err(err) = writer.flush() {
+                        error!("Couldn't flush csv: {err}");
+                    }
+                }
             }
         }
     }
 }
 
-fn yaml_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: I, filter: F, _: bool)
-where
+fn yaml_write<I, F>(
+    recv: BusReader<Arc<Record>>,
+    mut writer: I,
+    filter: F,
+    _: bool,
+    flush_all: bool,
+) where
     I: Write,
     F: RecordFilter,
 {
@@ -114,12 +144,22 @@ where
             if let Err(err) = writeln!(writer) {
                 error!("Couldn't append newline: {err}");
             }
+            if flush_all {
+                if let Err(err) = writer.flush() {
+                    error!("Couldn't flush csv: {err}");
+                }
+            }
         }
     }
 }
 
-fn write_uniqs<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
-where
+fn write_uniqs<I, F>(
+    recv: BusReader<Arc<Record>>,
+    mut writer: Writer<I>,
+    filter: F,
+    _: bool,
+    _: bool,
+) where
     I: Write,
     F: RecordFilter,
 {
@@ -172,7 +212,13 @@ macro_rules! fdump {
 
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
-                    $proc_f(recv, $creater($c_opt.make_stdout()), NO_FILTER, false);
+                    $proc_f(
+                        recv,
+                        $creater($c_opt.make_stdout()),
+                        NO_FILTER,
+                        false,
+                        false,
+                    );
                 });
             } else {
                 match File::create(&p) {
@@ -189,17 +235,24 @@ macro_rules! fdump {
                                     $creater($c_opt.make_gzip(BufWriter::new(f))),
                                     NO_FILTER,
                                     false,
+                                    false,
                                 );
                             } else if $c_opt.is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    $proc_f(recv, $creater($c_opt.make_zstd(f)), NO_FILTER, false);
+                                    $proc_f(
+                                        recv,
+                                        $creater($c_opt.make_zstd(f)),
+                                        NO_FILTER,
+                                        false,
+                                        false,
+                                    );
                                 }
 
                                 #[cfg(not(feature = "zstd"))]
                                 unreachable!("zstd feature not enabled");
                             } else {
-                                $proc_f(recv, $creater(BufWriter::new(f)), NO_FILTER, false);
+                                $proc_f(recv, $creater(BufWriter::new(f)), NO_FILTER, false, false);
                             };
                         });
                     }
@@ -487,18 +540,24 @@ fn watch(opts: opts::Watch) -> Result<()> {
                 let filt = PathFilter { path_rex };
                 match opts.format {
                     opts::WatchFormat::Csv => {
-                        csv_write(rec_recv, csv::Writer::from_writer(out), filt, false)
+                        csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
                     }
-                    opts::WatchFormat::Json => json_write(rec_recv, out, filt, opts.pretty),
-                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false),
+                    opts::WatchFormat::Json => json_write(rec_recv, out, filt, opts.pretty, true),
+                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
                 }
             } else {
                 match opts.format {
-                    opts::WatchFormat::Csv => {
-                        csv_write(rec_recv, csv::Writer::from_writer(out), NO_FILTER, false)
+                    opts::WatchFormat::Csv => csv_write(
+                        rec_recv,
+                        csv::Writer::from_writer(out),
+                        NO_FILTER,
+                        false,
+                        true,
+                    ),
+                    opts::WatchFormat::Json => {
+                        json_write(rec_recv, out, NO_FILTER, opts.pretty, true)
                     }
-                    opts::WatchFormat::Json => json_write(rec_recv, out, NO_FILTER, opts.pretty),
-                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, NO_FILTER, false),
+                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, NO_FILTER, false, true),
                 }
             }
         });

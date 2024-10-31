@@ -1,4 +1,10 @@
-use std::{ffi::OsStr, io::Write, ops::Sub, path::PathBuf, time::SystemTime};
+use std::{
+    ffi::OsStr,
+    io::{BufWriter, Write},
+    ops::Sub,
+    path::PathBuf,
+    time::SystemTime,
+};
 
 use clap::{value_parser, Args, Parser, Subcommand};
 use clap_complete::Shell;
@@ -232,7 +238,7 @@ impl CompressOpts {
         z.auto_finish()
     }
 
-    pub fn make_stdout(&self) -> Box<dyn Write> {
+    pub fn make_stdout(&self) -> BufWriter<Box<dyn Write>> {
         let out = std::io::stdout().lock();
 
         #[cfg(feature = "zstd")]
@@ -240,19 +246,22 @@ impl CompressOpts {
         #[cfg(not(feature = "zstd"))]
         let is_zstd = false;
 
-        if is_zstd {
-            #[cfg(feature = "zstd")]
-            {
-                Box::new(self.make_zstd(out))
-            }
+        BufWriter::with_capacity(
+            512,
+            if is_zstd {
+                #[cfg(feature = "zstd")]
+                {
+                    Box::new(self.make_zstd(out))
+                }
 
-            #[cfg(not(feature = "zstd"))]
-            unreachable!("zstd feature not enabled");
-        } else if self.gzip {
-            Box::new(self.make_gzip(out))
-        } else {
-            Box::new(out)
-        }
+                #[cfg(not(feature = "zstd"))]
+                unreachable!("zstd feature not enabled");
+            } else if self.gzip {
+                Box::new(self.make_gzip(out))
+            } else {
+                Box::new(out)
+            },
+        )
     }
 }
 
