@@ -1,8 +1,9 @@
-use std::{ffi::OsStr, ops::Sub, path::PathBuf, time::SystemTime};
+use std::{ffi::OsStr, io::Write, ops::Sub, path::PathBuf, time::SystemTime};
 
 use clap::{value_parser, Args, Parser, Subcommand};
 use clap_complete::Shell;
 use color_eyre::{eyre::eyre, Result};
+use std::path::Path;
 use time::OffsetDateTime;
 
 /// Utility to dump the fsevent files on OSX
@@ -56,6 +57,10 @@ pub struct Watch {
     /// Use polling (performance issues only use if the normal watcher doesn't work)
     #[arg(long)]
     pub poll: bool,
+
+    /// The compression options
+    #[clap(flatten)]
+    pub compress_opts: CompressOpts,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -121,10 +126,6 @@ pub struct Dump {
     #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 
-    /// The level we should compress the output as; 0-9
-    #[arg(short, long, default_value = "7")]
-    pub level: u32,
-
     /// How many days we should pull (based off the file mod time)
     #[arg(short = 'd', long = "days", default_value = "90")]
     pub pull_days: u32,
@@ -133,6 +134,126 @@ pub struct Dump {
     /// that has a filename consisting solely of hex chars will be considered a file to parse
     #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub files: Vec<PathBuf>,
+
+    /// The compression options
+    #[clap(flatten)]
+    pub compress_opts: CompressOpts,
+}
+
+#[derive(Clone, Copy, Debug, Args)]
+pub struct CompressOpts {
+    /// The level we should compress the gzip output as; 0-9
+    #[arg(short = 'l', alias = "level", long, default_value = "7")]
+    pub glevel: u32,
+
+    /// The level we should compress the zstd output as; 0-20
+    #[cfg(feature = "zstd")]
+    #[arg(long, default_value = "10")]
+    pub zlevel: u32,
+
+    /// How many threads to use for zstd compression (0 disables it)
+    #[cfg(feature = "zstd")]
+    #[arg(long, default_value = "2")]
+    pub zthreads: u16,
+
+    /// Force the output file (or stdout) to be gzip
+    #[arg(long)]
+    pub gzip: bool,
+
+    /// Force the output file (or stdout) to be zstd
+    #[cfg(feature = "zstd")]
+    #[arg(long, conflicts_with = "gzip")]
+    pub zstd: bool,
+}
+
+impl CompressOpts {
+    pub fn glvl(&self) -> flate2::Compression {
+        flate2::Compression::new(self.glevel)
+    }
+
+    #[cfg(feature = "zstd")]
+    pub fn zlvl(&self) -> i32 {
+        self.zlevel as i32
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.glevel > 9 {
+            return Err(eyre!(
+                "The gzip compression level must be between 0 and 9 (inclusive)",
+            ));
+        }
+
+        #[cfg(feature = "zstd")]
+        if self.zlevel > 20 {
+            return Err(eyre!(
+                "The zstd compression level must be between 0 and 20 (inclusive)",
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn is_gz(&self, path: &Path) -> bool {
+        self.gzip
+            || match path.extension() {
+                None => false,
+                Some(e) => e == "gz" || e == "gzip",
+            }
+    }
+
+    #[cfg(feature = "zstd")]
+    pub fn is_zstd(&self, path: &Path) -> bool {
+        self.zstd
+            || match path.extension() {
+                None => false,
+                Some(e) => e == "zstd" || e == "zst",
+            }
+    }
+
+    #[cfg(not(feature = "zstd"))]
+    pub const fn is_zstd(&self, _: &Path) -> bool {
+        false
+    }
+
+    pub fn make_gzip<W>(&self, w: W) -> flate2::write::GzEncoder<W>
+    where
+        W: Write,
+    {
+        flate2::write::GzEncoder::new(w, self.glvl())
+    }
+
+    #[cfg(feature = "zstd")]
+    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::AutoFinishEncoder<'a, W>
+    where
+        W: Write,
+    {
+        let mut z = zstd::stream::write::Encoder::new(w, self.zlvl()).unwrap();
+        z.multithread(self.zthreads as u32).unwrap();
+        z.auto_finish()
+    }
+
+    pub fn make_stdout(&self) -> Box<dyn Write> {
+        let out = std::io::stdout().lock();
+
+        #[cfg(feature = "zstd")]
+        let is_zstd = self.zstd;
+        #[cfg(not(feature = "zstd"))]
+        let is_zstd = false;
+
+        if is_zstd {
+            #[cfg(feature = "zstd")]
+            {
+                Box::new(self.make_zstd(out))
+            }
+
+            #[cfg(not(feature = "zstd"))]
+            unreachable!("zstd feature not enabled");
+        } else if self.gzip {
+            Box::new(self.make_gzip(out))
+        } else {
+            Box::new(out)
+        }
+    }
 }
 
 fn stdout_path(path: &Option<PathBuf>) -> bool {
@@ -159,11 +280,7 @@ impl Dump {
     }
 
     pub fn validate(&self, counts: usize) -> Result<()> {
-        if self.level > 9 {
-            return Err(eyre!(
-                "The compression level must be between 0 and 9 (inclusive)",
-            ));
-        }
+        self.compress_opts.validate()?;
 
         if counts > 1 {
             return Err(eyre!("Can't have more than one file printing to stdout!",));

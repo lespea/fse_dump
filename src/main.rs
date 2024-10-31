@@ -57,26 +57,6 @@ fn main() -> Result<()> {
     }
 }
 
-fn is_gz(path: &Path) -> bool {
-    match path.extension() {
-        None => false,
-        Some(e) => e == "gz" || e == "gzip",
-    }
-}
-
-#[cfg(feature = "zstd")]
-fn is_zstd(path: &Path) -> bool {
-    match path.extension() {
-        None => false,
-        Some(e) => e == "zstd" || e == "zst",
-    }
-}
-
-#[cfg(not(feature = "zstd"))]
-const fn is_zstd(_: &Path) -> bool {
-    false
-}
-
 fn csv_write<I, F>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, filter: F, _: bool)
 where
     I: Write,
@@ -186,13 +166,13 @@ fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
 }
 
 macro_rules! fdump {
-    ( $bus: ident, $scope: ident, $ftype: expr, $path:ident, $proc_f:ident, $g_lvl: ident, $creater:expr, ) => {
+    ( $bus: ident, $scope: ident, $ftype: expr, $path:ident, $proc_f:ident, $c_opt: ident, $creater:expr, ) => {
         if let Some(p) = $path {
             let recv = $bus.add_rx();
 
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
-                    $proc_f(recv, $creater(io::stdout().lock()), NO_FILTER, false);
+                    $proc_f(recv, $creater($c_opt.make_stdout()), NO_FILTER, false);
                 });
             } else {
                 match File::create(&p) {
@@ -203,23 +183,17 @@ macro_rules! fdump {
                     ),
                     Ok(f) => {
                         $scope.spawn(move |_| {
-                            if is_gz(&p) {
+                            if $c_opt.is_gz(&p) {
                                 $proc_f(
                                     recv,
-                                    $creater(flate2::write::GzEncoder::new(
-                                        BufWriter::new(f),
-                                        $g_lvl,
-                                    )),
+                                    $creater($c_opt.make_gzip(BufWriter::new(f))),
                                     NO_FILTER,
                                     false,
                                 );
-                            } else if is_zstd(&p) {
+                            } else if $c_opt.is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    let mut z = zstd::stream::write::Encoder::new(f, 10).unwrap();
-                                    z.multithread(2).unwrap();
-
-                                    $proc_f(recv, $creater(z.auto_finish()), NO_FILTER, false);
+                                    $proc_f(recv, $creater($c_opt.make_zstd(f)), NO_FILTER, false);
                                 }
 
                                 #[cfg(not(feature = "zstd"))]
@@ -313,7 +287,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         ..
     } = opts;
 
-    let g_lvl = flate2::Compression::new(opts.level);
+    let copts = opts.compress_opts;
 
     crossbeam::scope(|scope| {
         let mut bus = new_bus();
@@ -324,7 +298,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
             "csv",
             csv_path,
             csv_write,
-            g_lvl,
+            copts,
             csv::Writer::from_writer,
         );
 
@@ -334,12 +308,12 @@ fn dump(opts: opts::Dump) -> Result<()> {
             "unique csv",
             uniq_path,
             write_uniqs,
-            g_lvl,
+            copts,
             csv::Writer::from_writer,
         );
 
-        fdump!(bus, scope, "json", json_path, json_write, g_lvl, identity,);
-        fdump!(bus, scope, "yaml", yaml_path, yaml_write, g_lvl, identity,);
+        fdump!(bus, scope, "json", json_path, json_write, copts, identity,);
+        fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);
 
         for f in file_paths {
             let running = Arc::new(AtomicBool::new(true));
@@ -500,12 +474,15 @@ fn watch(opts: opts::Watch) -> Result<()> {
         mem::forget(debouncer);
     };
 
+    let copts = opts.compress_opts;
+
     crossbeam::scope(|fscope| {
         let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
         fscope.spawn(move |_| {
-            let out = io::stdout().lock();
+            let out = copts.make_stdout();
+
             if let Some(path_rex) = path_rex {
                 let filt = PathFilter { path_rex };
                 match opts.format {
