@@ -420,11 +420,11 @@ fn dump(opts: opts::Dump) -> Result<()> {
     Ok(())
 }
 
-fn generate(gen: Generate) -> Result<()> {
+fn generate(g: Generate) -> Result<()> {
     let mut cmd = opts::Cli::command();
     let name = cmd.get_name().to_string();
 
-    clap_complete::generate(gen.shell, &mut cmd, name, &mut io::stdout().lock());
+    clap_complete::generate(g.shell, &mut cmd, name, &mut io::stdout().lock());
     Ok(())
 }
 
