@@ -2,7 +2,7 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "2.1.1"
+version = "2.1.2"
 edition = "2021"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
@@ -47,7 +47,7 @@ log = { version = "0", features = [
     "release_max_level_info",
 ] }
 mimalloc = { version = "0", features = ["secure"] }
-notify = { version = "7", default-features = false, features = [
+notify = { version = "8", default-features = false, features = [
     "macos_kqueue",
 ] }
 notify-debouncer-full = { version = "0", optional = true }
