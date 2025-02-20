@@ -536,20 +536,17 @@ fn watch(opts: opts::Watch) -> Result<()> {
         fscope.spawn(move |_| {
             let out = copts.make_stdout();
 
-            match path_rex {
-                Some(path_rex) => {
-                    let filt = PathFilter { path_rex };
-                    match opts.format {
-                        opts::WatchFormat::Csv => {
-                            csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
-                        }
-                        opts::WatchFormat::Json => {
-                            json_write(rec_recv, out, filt, opts.pretty, true)
-                        }
-                        opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
+            if let Some(path_rex) = path_rex {
+                let filt = PathFilter { path_rex };
+                match opts.format {
+                    opts::WatchFormat::Csv => {
+                        csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
                     }
+                    opts::WatchFormat::Json => json_write(rec_recv, out, filt, opts.pretty, true),
+                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
                 }
-                _ => match opts.format {
+            } else {
+                match opts.format {
                     opts::WatchFormat::Csv => csv_write(
                         rec_recv,
                         csv::Writer::from_writer(out),
@@ -561,7 +558,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
                         json_write(rec_recv, out, NO_FILTER, opts.pretty, true)
                     }
                     opts::WatchFormat::Yaml => yaml_write(rec_recv, out, NO_FILTER, false, true),
-                },
+                }
             }
         });
 
