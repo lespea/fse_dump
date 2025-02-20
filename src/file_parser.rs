@@ -1,13 +1,13 @@
 use std::{
     fs::File,
-    io::{prelude::*, BufReader, ErrorKind},
+    io::{BufReader, ErrorKind, prelude::*},
     path::Path,
     sync::Arc,
 };
 
 use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use flate2::read::MultiGzDecoder;
 
 use crate::{record::Record, version};

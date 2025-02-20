@@ -15,9 +15,9 @@ use std::{
     io::{self, BufWriter, Write},
     path::Path,
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::RecvTimeoutError,
-        Arc,
     },
     thread,
     time::Duration,
@@ -433,7 +433,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
     use std::mem;
 
     use notify_debouncer_full::{
-        new_debouncer_opt, notify::RecursiveMode, DebounceEventResult, FileIdMap,
+        DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
     };
     use regex::bytes::Regex;
 
@@ -536,17 +536,20 @@ fn watch(opts: opts::Watch) -> Result<()> {
         fscope.spawn(move |_| {
             let out = copts.make_stdout();
 
-            if let Some(path_rex) = path_rex {
-                let filt = PathFilter { path_rex };
-                match opts.format {
-                    opts::WatchFormat::Csv => {
-                        csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
+            match path_rex {
+                Some(path_rex) => {
+                    let filt = PathFilter { path_rex };
+                    match opts.format {
+                        opts::WatchFormat::Csv => {
+                            csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
+                        }
+                        opts::WatchFormat::Json => {
+                            json_write(rec_recv, out, filt, opts.pretty, true)
+                        }
+                        opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
                     }
-                    opts::WatchFormat::Json => json_write(rec_recv, out, filt, opts.pretty, true),
-                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
                 }
-            } else {
-                match opts.format {
+                _ => match opts.format {
                     opts::WatchFormat::Csv => csv_write(
                         rec_recv,
                         csv::Writer::from_writer(out),
@@ -558,7 +561,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
                         json_write(rec_recv, out, NO_FILTER, opts.pretty, true)
                     }
                     opts::WatchFormat::Yaml => yaml_write(rec_recv, out, NO_FILTER, false, true),
-                }
+                },
             }
         });
 

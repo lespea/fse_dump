@@ -6,9 +6,9 @@ use std::{
     time::SystemTime,
 };
 
-use clap::{value_parser, Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, value_parser};
 use clap_complete::Shell;
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{Result, eyre::eyre};
 use std::path::Path;
 use time::OffsetDateTime;
 
