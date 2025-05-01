@@ -126,7 +126,7 @@ pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
 /// Turn the flag bits into a string. We simply enumerate the flags, see if it's set, and add the
 /// str to the list of flags found so far (comma separated)
 fn bits_to_str(bits: u32) -> FlagStrs {
-    debug!(target: "flags", "Figuring out the bits for {}", bits);
+    debug!(target: "flags", "Figuring out the bits for {bits}" );
     // Should be enough for every flag to be set (which shouldn't happen but just in case)
     let mut norm = String::with_capacity(500);
 
@@ -169,7 +169,7 @@ fn bits_to_str(bits: u32) -> FlagStrs {
 
 /// Given the bits, return a string representing the flags that are set
 pub fn parse_bits(bits: u32) -> FlagStrs {
-    debug!(target: "flags", "Translating the bits {}", bits);
+    debug!(target: "flags", "Translating the bits {bits}" );
     let ans = {
         flag_map()
             .read()

@@ -86,20 +86,20 @@ where
         debug!("Reading path");
         let rlen = reader.read_until(b'\0', &mut sbuf)?;
         if rlen == 0 || sbuf[rlen - 1] != b'\0' {
-            debug!("End of pages discovered :: {}", rlen);
+            debug!("End of pages discovered :: {rlen}");
             Ok(None)
         } else {
             debug!("Reading path done");
 
             let path = String::from_utf8_lossy(&sbuf[..rlen - 1]).into_owned();
-            debug!("Found path {}", path);
+            debug!("Found path {path}");
 
             let event_id = reader.read_u64::<BigEndian>()?;
-            debug!("Found event id {}", event_id);
+            debug!("Found event id {event_id}");
 
             let flag = reader.read_u32::<BigEndian>()?;
             let flags = flags::parse_bits(flag);
-            debug!("Found flags {:?}", flags);
+            debug!("Found flags {flags:?}");
 
             let mut tlen = rlen + 8 + 4; // u64 + u32
 

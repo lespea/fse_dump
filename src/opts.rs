@@ -375,7 +375,7 @@ impl Dump {
                                 }
 
                                 Err(err) => {
-                                    error!("Error iterating the files: {}", err);
+                                    error!("Error iterating the files: {err}");
                                 }
                             });
                     } else if info.is_file() {

@@ -39,7 +39,7 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
         reader.read_exact(&mut [0u8; 4])?;
         let p_len = reader.read_u32::<LittleEndian>()? as usize;
 
-        debug!("{:?} :: {}", v, p_len);
+        debug!("{v:?} :: {p_len}");
 
         let mut read = 12usize;
 
@@ -47,7 +47,7 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
             let rec = match parse_fun(&mut reader)? {
                 None => break,
                 Some((s, rec)) => {
-                    debug!("Read {} bits", s);
+                    debug!("Read {s} bits");
                     read += s;
                     rec
                 }
