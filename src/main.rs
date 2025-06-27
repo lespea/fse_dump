@@ -2,7 +2,6 @@
 #![warn(rust_2018_idioms)]
 #![warn(rust_2021_compatibility)]
 #![deny(warnings)]
-#![allow(clippy::collapsible_if)]
 
 #[macro_use]
 extern crate log;
@@ -73,10 +72,8 @@ fn csv_write<I, F>(
             if let Err(err) = writer.serialize(rec) {
                 error!("Couldn't serialize csv: {err}");
             }
-            if flush_all {
-                if let Err(err) = writer.flush() {
-                    error!("Couldn't flush csv: {err}");
-                }
+            if flush_all && let Err(err) = writer.flush() {
+                error!("Couldn't flush csv: {err}");
             }
         }
     }
@@ -101,10 +98,8 @@ fn json_write<I, F>(
                 if let Err(err) = writeln!(writer) {
                     error!("Couldn't append newline: {err}");
                 }
-                if flush_all {
-                    if let Err(err) = writer.flush() {
-                        error!("Couldn't flush csv: {err}");
-                    }
+                if flush_all && let Err(err) = writer.flush() {
+                    error!("Couldn't flush csv: {err}");
                 }
             }
         }
@@ -117,10 +112,8 @@ fn json_write<I, F>(
                 if let Err(err) = writeln!(writer) {
                     error!("Couldn't append newline: {err}");
                 }
-                if flush_all {
-                    if let Err(err) = writer.flush() {
-                        error!("Couldn't flush csv: {err}");
-                    }
+                if flush_all && let Err(err) = writer.flush() {
+                    error!("Couldn't flush csv: {err}");
                 }
             }
         }
@@ -145,10 +138,8 @@ fn yaml_write<I, F>(
             if let Err(err) = writeln!(writer) {
                 error!("Couldn't append newline: {err}");
             }
-            if flush_all {
-                if let Err(err) = writer.flush() {
-                    error!("Couldn't flush csv: {err}");
-                }
+            if flush_all && let Err(err) = writer.flush() {
+                error!("Couldn't flush csv: {err}");
             }
         }
     }
@@ -464,15 +455,11 @@ fn watch(opts: opts::Watch) -> Result<()> {
                 Ok(events) => events.iter().for_each(|event| {
                     if event.kind.is_create() {
                         for path in event.paths.iter() {
-                            if path.exists() {
-                                if let Err(err) =
+                            if path.exists()
+                                && let Err(err) =
                                     send.send_timeout(path.clone(), Duration::from_secs(1))
-                                {
-                                    error!(
-                                        "Error processing created file {}: {err}",
-                                        path.display()
-                                    );
-                                }
+                            {
+                                error!("Error processing created file {}: {err}", path.display());
                             }
                         }
                     }
@@ -499,15 +486,11 @@ fn watch(opts: opts::Watch) -> Result<()> {
                 Ok(events) => events.iter().for_each(|event| {
                     if event.kind.is_create() {
                         for path in event.paths.iter() {
-                            if path.exists() {
-                                if let Err(err) =
+                            if path.exists()
+                                && let Err(err) =
                                     send.send_timeout(path.clone(), Duration::from_secs(1))
-                                {
-                                    error!(
-                                        "Error processing created file {}: {err}",
-                                        path.display()
-                                    );
-                                }
+                            {
+                                error!("Error processing created file {}: {err}", path.display());
                             }
                         }
                     }

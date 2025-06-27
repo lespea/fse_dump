@@ -343,34 +343,33 @@ impl Dump {
                             .into_iter()
                             .for_each(|e| match e {
                                 Ok(e) => {
-                                    if let Ok(m) = e.metadata() {
-                                        if !m.is_dir()
-                                            && Dump::want_filename(e.file_name())
-                                            && if let Some(cut_time) = cutoff {
-                                                if let Ok(mod_time) =
-                                                    m.modified().or_else(|_| m.created())
-                                                {
-                                                    // Only process files that have a mod time greater than our
-                                                    // cutoff time
-                                                    if mod_time > cut_time {
-                                                        true
-                                                    } else {
-                                                        debug!(
-                                                            "Skipping {} due to time cutoff",
-                                                            e.path().display()
-                                                        );
-                                                        false
-                                                    }
-                                                } else {
+                                    if let Ok(m) = e.metadata()
+                                        && m.is_dir()
+                                        && Dump::want_filename(e.file_name())
+                                        && if let Some(cut_time) = cutoff {
+                                            if let Ok(mod_time) =
+                                                m.modified().or_else(|_| m.created())
+                                            {
+                                                // Only process files that have a mod time greater than our
+                                                // cutoff time
+                                                if mod_time > cut_time {
                                                     true
+                                                } else {
+                                                    debug!(
+                                                        "Skipping {} due to time cutoff",
+                                                        e.path().display()
+                                                    );
+                                                    false
                                                 }
                                             } else {
                                                 true
                                             }
-                                        {
-                                            debug!("Found the fs events file {:?}", e.path());
-                                            files.push(e.into_path());
+                                        } else {
+                                            true
                                         }
+                                    {
+                                        debug!("Found the fs events file {:?}", e.path());
+                                        files.push(e.into_path());
                                     }
                                 }
 
