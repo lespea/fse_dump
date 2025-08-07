@@ -77,5 +77,3 @@ jobs:
     - uses: rust-lang/crates-io-auth-action@v1
       id: auth
     - run: cargo publish
-      env:
-        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
