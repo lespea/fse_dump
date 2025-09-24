@@ -398,7 +398,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "fse_dump"
-version = "2.1.10"
+version = "2.1.11"
 dependencies = [
  "bus",
  "byteorder",
