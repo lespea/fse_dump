@@ -38,18 +38,12 @@ crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
-flate2 = { version = "1", features = [
-    "cloudflare_zlib",
-], default-features = false }
+flate2 = { version = "1", default-features = false, features = ["cloudflare_zlib"] }
 hashbrown = "0"
-log = { version = "0", features = [
-    "max_level_debug",
-    "release_max_level_info",
-] }
+jiff = "0"
+log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
 mimalloc = { version = "0", features = ["secure"] }
-notify = { version = "8", default-features = false, features = [
-    "macos_kqueue",
-] }
+notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
 notify-debouncer-full = { version = "0", optional = true }
 regex = "1"
 serde = { version = "1", features = ["rc"] }
@@ -57,7 +51,6 @@ serde-hex = { version = "0", optional = true }
 serde_derive = "1"
 serde_json = "1"
 serde_yaml = "0"
-time = { version = "0", features = ["local-offset"] }
 walkdir = "2"
 zstd = { version = "0", features = ["zstdmt"], optional = true }
 

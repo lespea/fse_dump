@@ -1,7 +1,6 @@
 use std::{
     ffi::OsStr,
     io::{BufWriter, Write},
-    ops::Sub,
     path::PathBuf,
     time::SystemTime,
 };
@@ -9,8 +8,8 @@ use std::{
 use clap::{Args, Parser, Subcommand, value_parser};
 use clap_complete::Shell;
 use color_eyre::{Result, eyre::eyre};
+use jiff::{Span, Zoned};
 use std::path::Path;
-use time::OffsetDateTime;
 
 /// Utility to dump the fsevent files on OSX
 #[derive(Debug, Parser)]
@@ -315,10 +314,11 @@ impl Dump {
     fn cutoff_time(&self) -> Option<SystemTime> {
         if self.pull_days > 0 {
             Some(
-                OffsetDateTime::now_local()
-                    .unwrap_or_else(|_| OffsetDateTime::now_utc())
-                    .sub(time::Duration::days(self.pull_days as i64))
-                    .replace_time(time::Time::MIDNIGHT)
+                Zoned::now()
+                    .checked_sub(Span::new().days(self.pull_days))
+                    .expect("invalid date offset")
+                    .start_of_day()
+                    .expect("invalid date offset")
                     .into(),
             )
         } else {
