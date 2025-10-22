@@ -343,33 +343,53 @@ impl Dump {
                             .into_iter()
                             .for_each(|e| match e {
                                 Ok(e) => {
-                                    if let Ok(m) = e.metadata()
-                                        && m.is_dir()
-                                        && Dump::want_filename(e.file_name())
-                                        && if let Some(cut_time) = cutoff {
-                                            if let Ok(mod_time) =
-                                                m.modified().or_else(|_| m.created())
-                                            {
-                                                // Only process files that have a mod time greater than our
-                                                // cutoff time
-                                                if mod_time > cut_time {
-                                                    true
+                                    // Do the filename check first since it's fast and doesn't do
+                                    // any metadata reads
+                                    if Dump::want_filename(e.file_name()) {
+                                        let want_file = if let Ok(m) = e.metadata() {
+                                            if !m.is_dir() {
+                                                // See if we care about filtering by time
+                                                if let Some(cut_time) = cutoff {
+                                                    // Get the file mod/create time
+                                                    if let Ok(mod_time) =
+                                                        m.modified().or_else(|_| m.created())
+                                                    {
+                                                        // Only process files that have a mod time greater than our
+                                                        // cutoff time
+                                                        if mod_time > cut_time {
+                                                            true
+                                                        } else {
+                                                            debug!(
+                                                                "Skipping {} due to time cutoff",
+                                                                e.path().display()
+                                                            );
+                                                            false
+                                                        }
+                                                    } else {
+                                                        // Weird metadata issue assume we want it
+                                                        true
+                                                    }
                                                 } else {
-                                                    debug!(
-                                                        "Skipping {} due to time cutoff",
-                                                        e.path().display()
-                                                    );
-                                                    false
+                                                    // No time filters always include
+                                                    true
                                                 }
                                             } else {
-                                                true
+                                                // Skip dirs
+                                                false
                                             }
-                                        } else {
+                                        } else if Dump::want_filename(e.file_name()) {
+                                            // Couldn't get metadata so not sure what this is, try
+                                            // getting it anyway (very unlikely to get here)
                                             true
+                                        } else {
+                                            // Bad filename
+                                            false
+                                        };
+
+                                        if want_file {
+                                            debug!("Found the fs events file {:?}", e.path());
+                                            files.push(e.into_path());
                                         }
-                                    {
-                                        debug!("Found the fs events file {:?}", e.path());
-                                        files.push(e.into_path());
                                     }
                                 }
 
