@@ -8,6 +8,8 @@ use regex::Regex;
 #[cfg(feature = "hex")]
 use serde_hex::{CompactCapPfx, SerHex, SerHexOpt};
 
+use jiff::Timestamp;
+
 use crate::flags;
 
 /// Represents a file system event record from macOS fseventsd
@@ -26,6 +28,22 @@ pub struct Record {
     #[cfg(feature = "extra_id")]
     #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub extra_id: Option<u32>,
+    #[serde(serialize_with = "serialize_optional_timestamp")]
+    pub file_timestamp: Option<Timestamp>,
+}
+
+/// Custom serializer for Option<Timestamp> to produce ISO 8601 format
+fn serialize_optional_timestamp<S>(
+    timestamp: &Option<Timestamp>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match timestamp {
+        Some(ts) => serializer.serialize_str(&ts.to_string()),
+        None => serializer.serialize_none(),
+    }
 }
 
 /// Filter for selecting which records to process based on path patterns and flags
@@ -120,6 +138,7 @@ mod tests {
             node_id: Some(67890),
             #[cfg(feature = "extra_id")]
             extra_id: Some(42),
+            file_timestamp: None,
         }
     }
 

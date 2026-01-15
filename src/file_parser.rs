@@ -14,6 +14,7 @@ use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
 use color_eyre::{Result, eyre::eyre};
 use flate2::read::MultiGzDecoder;
+use jiff::Timestamp;
 
 use crate::{
     record::{Record, RecordFilter},
@@ -40,6 +41,14 @@ use crate::{
 /// - Record lengths don't match expected values
 pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFilter) -> Result<()> {
     info!("Parsing {}", in_file.display());
+
+    // Get file modification time
+    let file_timestamp = in_file
+        .metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .and_then(|st| Timestamp::try_from(st).ok());
+
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
 
     loop {
@@ -73,7 +82,7 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
         let mut read = 12usize;
 
         loop {
-            let rec = match parse_fun(&mut reader)? {
+            let mut rec = match parse_fun(&mut reader)? {
                 None => break,
                 Some((s, rec)) => {
                     debug!("Read {s} bits");
@@ -81,6 +90,9 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
                     rec
                 }
             };
+
+            // Set the file timestamp on the record
+            rec.file_timestamp = file_timestamp;
 
             // Check length before filtering to avoid reading past page boundary
             if read >= p_len {
@@ -296,7 +308,7 @@ mod tests {
         let records: Vec<_> = recv.iter().collect();
 
         // Test that we can access record fields
-        assert!(records.len() > 0);
+        assert!(!records.is_empty());
 
         // Check that we have diverse flag types
         let has_created = records.iter().any(|r| r.flags.contains("Created"));
