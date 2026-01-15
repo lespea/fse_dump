@@ -72,20 +72,52 @@ impl UniqueCounts {
             latest_timestamp: self.latest_timestamp,
         }
     }
+
+    /// Converts internal counts to output format without timestamps (for CSV)
+    ///
+    /// # Arguments
+    /// * `path` - The file path associated with these counts
+    ///
+    /// # Returns
+    /// A `UniqueOut` ready for serialization without timestamp fields
+    #[inline]
+    pub fn into_unique_out_no_timestamps(self, path: String) -> UniqueOut {
+        let flags = f::parse_bits(self.flags);
+        UniqueOut {
+            path,
+            counts: self.counts,
+            flags: flags.norm,
+            #[cfg(feature = "alt_flags")]
+            alt_flags: flags.alt,
+            earliest_timestamp: None,
+            latest_timestamp: None,
+        }
+    }
 }
 
 /// Output structure for unique path aggregation results
 #[derive(Debug, Serialize)]
 pub struct UniqueOut {
-    path: String,
-    counts: u64,
-    flags: &'static str,
+    pub path: String,
+    pub counts: u64,
+    pub flags: &'static str,
     #[cfg(feature = "alt_flags")]
-    alt_flags: &'static str,
-    #[serde(serialize_with = "serialize_optional_timestamp")]
-    earliest_timestamp: Option<Timestamp>,
-    #[serde(serialize_with = "serialize_optional_timestamp")]
-    latest_timestamp: Option<Timestamp>,
+    pub alt_flags: &'static str,
+    #[serde(
+        skip_serializing_if = "should_skip_timestamp",
+        serialize_with = "serialize_optional_timestamp"
+    )]
+    pub earliest_timestamp: Option<Timestamp>,
+    #[serde(
+        skip_serializing_if = "should_skip_timestamp",
+        serialize_with = "serialize_optional_timestamp"
+    )]
+    pub latest_timestamp: Option<Timestamp>,
+}
+
+/// Helper to determine if timestamp should be skipped during serialization
+fn should_skip_timestamp(ts: &Option<Timestamp>) -> bool {
+    ts.is_none()
 }
 
 /// Custom serializer for Option<Timestamp> to produce ISO 8601 format

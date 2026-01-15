@@ -133,6 +133,10 @@ pub struct Dump {
     #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 
+    /// Include earliest/latest timestamps in unique CSV output (always included in JSON/YAML)
+    #[arg(long = "unique-timestamps")]
+    pub unique_timestamps: bool,
+
     /// How many days we should pull (based off the file mod time)
     #[arg(short = 'd', long = "days", default_value = "90")]
     pub pull_days: u32,
@@ -598,6 +602,7 @@ mod tests {
             json: Some(PathBuf::from("output.json")),
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 90,
             files: vec![],
             compress_opts: CompressOpts {
@@ -630,6 +635,7 @@ mod tests {
             json: Some(PathBuf::from("output.json")),
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 90,
             files: vec![],
             compress_opts: CompressOpts {
@@ -662,6 +668,7 @@ mod tests {
             json: Some(PathBuf::from("-")),
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 90,
             files: vec![],
             compress_opts: CompressOpts {
@@ -698,6 +705,7 @@ mod tests {
             json: None,
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 90,
             files: vec![],
             compress_opts: CompressOpts {
@@ -731,6 +739,7 @@ mod tests {
             json: None,
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 90,
             files: vec![],
             compress_opts: CompressOpts {
@@ -782,6 +791,7 @@ mod tests {
             json: None,
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 0, // No time filter
             files: vec![],
             compress_opts: CompressOpts {
@@ -814,6 +824,7 @@ mod tests {
             json: None,
             yaml: None,
             uniques: None,
+            unique_timestamps: false,
             pull_days: 30,
             files: vec![],
             compress_opts: CompressOpts {

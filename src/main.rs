@@ -143,9 +143,13 @@ where
 /// * `recv` - Bus reader receiving record updates
 /// * `writer` - CSV writer for unique path output
 /// * `_` - Unused pretty print flag (kept for API consistency)
-/// * `_` - Unused flush_all flag (kept for API consistency)
-fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, _: bool)
-where
+/// * `include_timestamps` - Whether to include timestamps in CSV output
+fn write_uniqs<I>(
+    recv: BusReader<Arc<Record>>,
+    mut writer: Writer<I>,
+    _: bool,
+    include_timestamps: bool,
+) where
     I: Write,
 {
     let mut u = BTreeMap::new();
@@ -156,9 +160,43 @@ where
             .update(rec.flag, rec.file_timestamp);
     }
 
-    for (path, v) in u {
-        if let Err(err) = writer.serialize(v.into_unique_out(path)) {
-            error!("Error writing the uniques: {err}");
+    if include_timestamps {
+        // Use full serialization with timestamps
+        for (path, v) in u {
+            if let Err(err) = writer.serialize(v.into_unique_out(path)) {
+                error!("Error writing the uniques: {err}");
+            }
+        }
+    } else {
+        // Manually write CSV without timestamps
+        // Write header
+        #[cfg(feature = "alt_flags")]
+        let header = vec!["path", "counts", "flags", "alt_flags"];
+        #[cfg(not(feature = "alt_flags"))]
+        let header = vec!["path", "counts", "flags"];
+
+        if let Err(err) = writer.write_record(&header) {
+            error!("Error writing CSV header: {err}");
+            return;
+        }
+
+        // Write data rows
+        for (path, v) in u {
+            let out = v.into_unique_out_no_timestamps(path);
+            let counts_str = out.counts.to_string();
+            #[cfg(feature = "alt_flags")]
+            let record = vec![
+                out.path.as_str(),
+                counts_str.as_str(),
+                out.flags,
+                out.alt_flags,
+            ];
+            #[cfg(not(feature = "alt_flags"))]
+            let record = vec![out.path.as_str(), counts_str.as_str(), out.flags];
+
+            if let Err(err) = writer.write_record(&record) {
+                error!("Error writing unique record: {err}");
+            }
         }
     }
 }
@@ -314,6 +352,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         json: json_path,
         yaml: yaml_path,
         uniques: uniq_path,
+        unique_timestamps,
         ..
     } = opts;
 
@@ -334,15 +373,60 @@ fn dump(opts: opts::Dump) -> Result<()> {
             csv::Writer::from_writer,
         );
 
-        fdump!(
-            bus,
-            scope,
-            "unique csv",
-            uniq_path,
-            write_uniqs,
-            copts,
-            csv::Writer::from_writer,
-        );
+        // Handle uniques output with timestamp flag
+        if let Some(p) = uniq_path {
+            let recv = bus.add_rx();
+
+            if path_stdout(&p) {
+                scope.spawn(move |_| {
+                    write_uniqs(
+                        recv,
+                        csv::Writer::from_writer(copts.make_stdout()),
+                        false,
+                        unique_timestamps,
+                    );
+                });
+            } else {
+                match File::create(&p) {
+                    Err(err) => error!(
+                        "Couldn't create unique csv output file {}: {err}",
+                        p.display()
+                    ),
+                    Ok(f) => {
+                        scope.spawn(move |_| {
+                            if copts.is_gz(&p) {
+                                write_uniqs(
+                                    recv,
+                                    csv::Writer::from_writer(copts.make_gzip(BufWriter::new(f))),
+                                    false,
+                                    unique_timestamps,
+                                );
+                            } else if copts.is_zstd(&p) {
+                                #[cfg(feature = "zstd")]
+                                {
+                                    write_uniqs(
+                                        recv,
+                                        csv::Writer::from_writer(copts.make_zstd(f)),
+                                        false,
+                                        unique_timestamps,
+                                    );
+                                }
+
+                                #[cfg(not(feature = "zstd"))]
+                                unreachable!("zstd feature not enabled");
+                            } else {
+                                write_uniqs(
+                                    recv,
+                                    csv::Writer::from_writer(BufWriter::new(f)),
+                                    false,
+                                    unique_timestamps,
+                                );
+                            };
+                        });
+                    }
+                }
+            }
+        }
 
         fdump!(bus, scope, "json", json_path, json_write, copts, identity,);
         fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);

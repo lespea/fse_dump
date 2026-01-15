@@ -28,8 +28,22 @@ pub struct Record {
     #[cfg(feature = "extra_id")]
     #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub extra_id: Option<u32>,
-    #[serde(skip_serializing)]
+    #[serde(serialize_with = "serialize_optional_timestamp")]
     pub file_timestamp: Option<Timestamp>,
+}
+
+/// Custom serializer for Option<Timestamp> to produce ISO 8601 format
+fn serialize_optional_timestamp<S>(
+    timestamp: &Option<Timestamp>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match timestamp {
+        Some(ts) => serializer.serialize_str(&ts.to_string()),
+        None => serializer.serialize_none(),
+    }
 }
 
 /// Filter for selecting which records to process based on path patterns and flags
