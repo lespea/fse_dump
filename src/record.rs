@@ -1,6 +1,8 @@
-use regex::bytes::Regex;
+use regex::Regex;
 #[cfg(feature = "hex")]
 use serde_hex::{CompactCapPfx, SerHex, SerHexOpt};
+
+use crate::flags;
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Record {
@@ -19,26 +21,59 @@ pub struct Record {
     pub extra_id: Option<u32>,
 }
 
-pub trait RecordFilter {
-    fn filter(&self, rec: &Record) -> bool;
+#[derive(Clone, Default)]
+pub struct RecordFilter {
+    pub path_rex: Option<Regex>,
+    pub any_flag: u32,
+    pub all_flag: u32,
 }
 
-#[derive(Clone, Copy)]
-pub struct NoRecordFilter;
-impl RecordFilter for NoRecordFilter {
-    #[inline]
-    fn filter(&self, _: &Record) -> bool {
-        true
+impl RecordFilter {
+    pub fn new(pat: &Option<String>, any_flags: &[String], all_flags: &[String]) -> Self {
+        let mut any_flag = 0;
+        let mut all_flag = 0;
+
+        for flag in any_flags.iter() {
+            any_flag |=
+                flags::flag_id(flag).unwrap_or_else(|| panic!("Unknown any flag id: {flag}"));
+        }
+
+        for flag in all_flags.iter() {
+            all_flag |=
+                flags::flag_id(flag).unwrap_or_else(|| panic!("Unknown all flag id: {flag}"));
+        }
+
+        Self {
+            path_rex: pat
+                .as_ref()
+                .map(|pat| Regex::new(pat).expect("Invalid pattern")),
+            any_flag,
+            all_flag,
+        }
     }
-}
 
-pub struct PathFilter {
-    pub path_rex: Regex,
-}
-
-impl RecordFilter for PathFilter {
     #[inline]
-    fn filter(&self, rec: &Record) -> bool {
-        self.path_rex.is_match(rec.path.as_bytes())
+    pub fn want(&self, rec: &Record) -> bool {
+        self.match_flags(rec, self.any_flag, true)
+            && self.match_flags(rec, self.all_flag, false)
+            && self.match_path(rec)
+    }
+
+    #[inline]
+    fn match_path(&self, rec: &Record) -> bool {
+        self.path_rex
+            .as_ref()
+            .map(|rex| rex.is_match(&rec.path))
+            .unwrap_or(true)
+    }
+
+    #[inline]
+    fn match_flags(&self, rec: &Record, flags: u32, any: bool) -> bool {
+        if flags > 0 {
+            let diff = flags & rec.flag;
+            if any { diff > 0 } else { diff == flags }
+        } else {
+            true
+        }
     }
 }

@@ -67,6 +67,16 @@ static ALT_FLAGS: [(&str, u32); 22] = [
     // ("0x80000000", 0x_8000_0000),
 ];
 
+pub fn flag_id(want: &str) -> Option<u32> {
+    FLAGS.iter().find_map(|(name, id)| {
+        if name.eq_ignore_ascii_case(want) {
+            Some(*id)
+        } else {
+            None
+        }
+    })
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FlagStrs {
     pub norm: &'static str,

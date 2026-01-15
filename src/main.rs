@@ -30,7 +30,6 @@ use csv::Writer;
 use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
 use opts::{Commands, Generate};
-use record::RecordFilter;
 
 use crate::record::Record;
 
@@ -46,8 +45,6 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-static NO_FILTER: record::NoRecordFilter = record::NoRecordFilter {};
-
 fn main() -> Result<()> {
     match opts::get_opts()?.command {
         Commands::Dump(d) => dump(d),
@@ -57,83 +54,40 @@ fn main() -> Result<()> {
     }
 }
 
-fn csv_write<I, F>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: Writer<I>,
-    filter: F,
-    _: bool,
-    flush_all: bool,
-) where
+fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, flush_all: bool)
+where
     I: Write,
-    F: RecordFilter,
 {
     for rec in recv {
-        if filter.filter(&rec) {
-            if let Err(err) = writer.serialize(rec) {
-                error!("Couldn't serialize csv: {err}");
+        if let Err(err) = writer.serialize(rec) {
+            error!("Couldn't serialize csv: {err}");
+        }
+        if flush_all && let Err(err) = writer.flush() {
+            error!("Couldn't flush csv: {err}");
+        }
+    }
+}
+
+fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, pretty: bool, flush_all: bool)
+where
+    I: Write,
+{
+    if pretty {
+        for rec in recv {
+            if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
+                error!("Couldn't serialize json: {err}");
+            }
+            if let Err(err) = writeln!(writer) {
+                error!("Couldn't append newline: {err}");
             }
             if flush_all && let Err(err) = writer.flush() {
                 error!("Couldn't flush csv: {err}");
             }
         }
-    }
-}
-
-fn json_write<I, F>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: I,
-    filter: F,
-    pretty: bool,
-    flush_all: bool,
-) where
-    I: Write,
-    F: RecordFilter,
-{
-    if pretty {
-        for rec in recv {
-            if filter.filter(&rec) {
-                if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
-                    error!("Couldn't serialize json: {err}");
-                }
-                if let Err(err) = writeln!(writer) {
-                    error!("Couldn't append newline: {err}");
-                }
-                if flush_all && let Err(err) = writer.flush() {
-                    error!("Couldn't flush csv: {err}");
-                }
-            }
-        }
     } else {
         for rec in recv {
-            if filter.filter(&rec) {
-                if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
-                    error!("Couldn't serialize json: {err}");
-                }
-                if let Err(err) = writeln!(writer) {
-                    error!("Couldn't append newline: {err}");
-                }
-                if flush_all && let Err(err) = writer.flush() {
-                    error!("Couldn't flush csv: {err}");
-                }
-            }
-        }
-    }
-}
-
-fn yaml_write<I, F>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: I,
-    filter: F,
-    _: bool,
-    flush_all: bool,
-) where
-    I: Write,
-    F: RecordFilter,
-{
-    for rec in recv {
-        if filter.filter(&rec) {
-            if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
-                error!("Couldn't serialize yaml: {err}");
+            if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
+                error!("Couldn't serialize json: {err}");
             }
             if let Err(err) = writeln!(writer) {
                 error!("Couldn't append newline: {err}");
@@ -145,24 +99,33 @@ fn yaml_write<I, F>(
     }
 }
 
-fn write_uniqs<I, F>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: Writer<I>,
-    filter: F,
-    _: bool,
-    _: bool,
-) where
+fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, _: bool, flush_all: bool)
+where
     I: Write,
-    F: RecordFilter,
+{
+    for rec in recv {
+        if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
+            error!("Couldn't serialize yaml: {err}");
+        }
+        if let Err(err) = writeln!(writer) {
+            error!("Couldn't append newline: {err}");
+        }
+        if flush_all && let Err(err) = writer.flush() {
+            error!("Couldn't flush csv: {err}");
+        }
+    }
+}
+
+fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, _: bool)
+where
+    I: Write,
 {
     let mut u = BTreeMap::new();
 
     for rec in recv {
-        if filter.filter(&rec) {
-            u.entry(rec.path.clone())
-                .or_insert_with(uniques::UniqueCounts::default)
-                .update(rec.flag);
-        }
+        u.entry(rec.path.clone())
+            .or_insert_with(uniques::UniqueCounts::default)
+            .update(rec.flag);
     }
 
     for (path, v) in u {
@@ -204,13 +167,7 @@ macro_rules! fdump {
 
             if path_stdout(&p) {
                 $scope.spawn(move |_| {
-                    $proc_f(
-                        recv,
-                        $creater($c_opt.make_stdout()),
-                        NO_FILTER,
-                        false,
-                        false,
-                    );
+                    $proc_f(recv, $creater($c_opt.make_stdout()), false, false);
                 });
             } else {
                 match File::create(&p) {
@@ -225,26 +182,19 @@ macro_rules! fdump {
                                 $proc_f(
                                     recv,
                                     $creater($c_opt.make_gzip(BufWriter::new(f))),
-                                    NO_FILTER,
                                     false,
                                     false,
                                 );
                             } else if $c_opt.is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    $proc_f(
-                                        recv,
-                                        $creater($c_opt.make_zstd(f)),
-                                        NO_FILTER,
-                                        false,
-                                        false,
-                                    );
+                                    $proc_f(recv, $creater($c_opt.make_zstd(f)), false, false);
                                 }
 
                                 #[cfg(not(feature = "zstd"))]
                                 unreachable!("zstd feature not enabled");
                             } else {
-                                $proc_f(recv, $creater(BufWriter::new(f)), NO_FILTER, false, false);
+                                $proc_f(recv, $creater(BufWriter::new(f)), false, false);
                             };
                         });
                     }
@@ -332,6 +282,8 @@ fn dump(opts: opts::Dump) -> Result<()> {
         ..
     } = opts;
 
+    let rec_filter = opts.filter_opts.filter();
+
     let copts = opts.compress_opts;
 
     crossbeam::scope(|scope| {
@@ -397,7 +349,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                     iyaml,
                 );
 
-                match file_parser::parse_file(&f, &mut bus) {
+                match file_parser::parse_file(&f, &mut bus, &rec_filter) {
                     Ok(_) => info!("Finished parsing {}", f.display()),
                     Err(e) => error!("Couldn't parse '{}': {}", f.display(), e),
                 };
@@ -427,9 +379,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
     use notify_debouncer_full::{
         DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
     };
-    use regex::bytes::Regex;
 
-    use crate::{file_parser::parse_file, record::PathFilter};
+    use crate::file_parser::parse_file;
 
     env_logger::Builder::new()
         .filter(None, LevelFilter::Info)
@@ -439,9 +390,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     color_eyre::install()?;
 
-    let path_rex = opts
-        .filter
-        .map(|re| Regex::new(&re).expect("Bad filter regex"));
+    let rec_filter = opts.filter_opts.filter();
 
     let (send, recv) = crossbeam_channel::bounded(128);
 
@@ -520,34 +469,17 @@ fn watch(opts: opts::Watch) -> Result<()> {
         fscope.spawn(move |_| {
             let out = copts.make_stdout();
 
-            if let Some(path_rex) = path_rex {
-                let filt = PathFilter { path_rex };
-                match opts.format {
-                    opts::WatchFormat::Csv => {
-                        csv_write(rec_recv, csv::Writer::from_writer(out), filt, false, true)
-                    }
-                    opts::WatchFormat::Json => json_write(rec_recv, out, filt, opts.pretty, true),
-                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, filt, false, true),
+            match opts.format {
+                opts::WatchFormat::Csv => {
+                    csv_write(rec_recv, csv::Writer::from_writer(out), false, true)
                 }
-            } else {
-                match opts.format {
-                    opts::WatchFormat::Csv => csv_write(
-                        rec_recv,
-                        csv::Writer::from_writer(out),
-                        NO_FILTER,
-                        false,
-                        true,
-                    ),
-                    opts::WatchFormat::Json => {
-                        json_write(rec_recv, out, NO_FILTER, opts.pretty, true)
-                    }
-                    opts::WatchFormat::Yaml => yaml_write(rec_recv, out, NO_FILTER, false, true),
-                }
+                opts::WatchFormat::Json => json_write(rec_recv, out, opts.pretty, true),
+                opts::WatchFormat::Yaml => yaml_write(rec_recv, out, false, true),
             }
         });
 
         for path in recv {
-            if let Err(err) = parse_file(&path, &mut bus) {
+            if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
                 error!("Error parsing {}: {err}", path.display());
             }
         }

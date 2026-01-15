@@ -10,9 +10,12 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use color_eyre::{Result, eyre::eyre};
 use flate2::read::MultiGzDecoder;
 
-use crate::{record::Record, version};
+use crate::{
+    record::{Record, RecordFilter},
+    version,
+};
 
-pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
+pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFilter) -> Result<()> {
     info!("Parsing {}", in_file.display());
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
 
@@ -53,6 +56,11 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>) -> Result<()> {
                 }
             };
 
+            if !filter.want(&rec) {
+                debug!("Skipping {rec:?} due to the filters");
+                continue;
+            }
+
             bus.broadcast(Arc::new(rec));
 
             if read >= p_len {
@@ -75,6 +83,8 @@ mod tests {
 
     use bus::Bus;
 
+    use crate::record::RecordFilter;
+
     use super::parse_file;
 
     #[test]
@@ -83,7 +93,7 @@ mod tests {
         let mut recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
-        parse_file(&path, &mut bus).expect("Couldn't find test file");
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't find test file");
         drop(bus);
 
         let count = recv.iter().count();

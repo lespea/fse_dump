@@ -11,6 +11,8 @@ use color_eyre::{Result, eyre::eyre};
 use jiff::{Span, Zoned};
 use std::path::Path;
 
+use crate::record::RecordFilter;
+
 /// Utility to dump the fsevent files on OSX
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -51,10 +53,6 @@ pub struct Watch {
     #[arg(short, long)]
     pub pretty: bool,
 
-    /// Filter events based on the path
-    #[arg(long)]
-    pub filter: Option<String>,
-
     /// The dirs to watch
     #[arg(default_value = "/System/Volumes/Data/.fseventsd/")]
     pub watch_dirs: Vec<PathBuf>,
@@ -66,6 +64,10 @@ pub struct Watch {
     /// The compression options
     #[clap(flatten)]
     pub compress_opts: CompressOpts,
+
+    /// The filter options
+    #[clap(flatten)]
+    pub filter_opts: FilterOpts,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -143,6 +145,31 @@ pub struct Dump {
     /// The compression options
     #[clap(flatten)]
     pub compress_opts: CompressOpts,
+
+    /// The filter options
+    #[clap(flatten)]
+    pub filter_opts: FilterOpts,
+}
+
+#[derive(Debug, Args)]
+pub struct FilterOpts {
+    /// Only show entries that have a path matching this regex
+    #[arg(short = 'p', long = "path-filter")]
+    pub filter_paths: Option<String>,
+
+    /// Only show entries if any of the flags are present in the operation
+    #[arg(short = 'f', long = "any-flags", conflicts_with = "all-flags")]
+    pub any_flags: Vec<String>,
+
+    /// Only show entries if all of the flags are present in the operation
+    #[arg(long = "all-flags", conflicts_with = "any-flags")]
+    pub all_flags: Vec<String>,
+}
+
+impl FilterOpts {
+    pub fn filter(&self) -> RecordFilter {
+        RecordFilter::new(&self.filter_paths, &self.any_flags, &self.all_flags)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Args)]
