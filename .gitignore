@@ -8,3 +8,4 @@
 .idea/
 !testfiles/**
 !dprint.json
+.DS_Store
