@@ -404,13 +404,10 @@ impl Dump {
                                                 // Skip dirs
                                                 false
                                             }
-                                        } else if Dump::want_filename(e.file_name()) {
+                                        } else {
                                             // Couldn't get metadata so not sure what this is, try
                                             // getting it anyway (very unlikely to get here)
                                             true
-                                        } else {
-                                            // Bad filename
-                                            false
                                         };
 
                                         if want_file {
@@ -439,4 +436,453 @@ impl Dump {
 
 pub fn get_opts() -> Result<Cli> {
     Ok(Cli::parse())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compress_opts_glvl() {
+        let opts = CompressOpts {
+            glevel: 5,
+            #[cfg(feature = "zstd")]
+            zlevel: 10,
+            #[cfg(feature = "zstd")]
+            zthreads: 2,
+            gzip: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
+        };
+
+        let compression = opts.glvl();
+        assert_eq!(compression.level(), 5);
+    }
+
+    #[test]
+    fn test_compress_opts_validate_valid_gzip() {
+        let opts = CompressOpts {
+            glevel: 9,
+            #[cfg(feature = "zstd")]
+            zlevel: 10,
+            #[cfg(feature = "zstd")]
+            zthreads: 2,
+            gzip: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
+        };
+
+        assert!(opts.validate().is_ok());
+    }
+
+    #[test]
+    fn test_compress_opts_validate_invalid_gzip() {
+        let opts = CompressOpts {
+            glevel: 10, // Invalid: max is 9
+            #[cfg(feature = "zstd")]
+            zlevel: 10,
+            #[cfg(feature = "zstd")]
+            zthreads: 2,
+            gzip: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
+        };
+
+        assert!(opts.validate().is_err());
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_compress_opts_validate_valid_zstd() {
+        let opts = CompressOpts {
+            glevel: 5,
+            zlevel: 20,
+            zthreads: 4,
+            gzip: false,
+            zstd: false,
+        };
+
+        assert!(opts.validate().is_ok());
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_compress_opts_validate_invalid_zstd() {
+        let opts = CompressOpts {
+            glevel: 5,
+            zlevel: 21, // Invalid: max is 20
+            zthreads: 2,
+            gzip: false,
+            zstd: false,
+        };
+
+        assert!(opts.validate().is_err());
+    }
+
+    #[test]
+    fn test_compress_opts_is_gz_by_extension() {
+        let opts = CompressOpts {
+            glevel: 5,
+            #[cfg(feature = "zstd")]
+            zlevel: 10,
+            #[cfg(feature = "zstd")]
+            zthreads: 2,
+            gzip: false,
+            #[cfg(feature = "zstd")]
+            zstd: false,
+        };
+
+        assert!(opts.is_gz(Path::new("output.gz")));
+        assert!(opts.is_gz(Path::new("output.gzip")));
+        assert!(!opts.is_gz(Path::new("output.txt")));
+        assert!(!opts.is_gz(Path::new("output")));
+    }
+
+    #[test]
+    fn test_compress_opts_is_gz_forced() {
+        let opts = CompressOpts {
+            glevel: 5,
+            #[cfg(feature = "zstd")]
+            zlevel: 10,
+            #[cfg(feature = "zstd")]
+            zthreads: 2,
+            gzip: true, // Force gzip
+            #[cfg(feature = "zstd")]
+            zstd: false,
+        };
+
+        // Should return true even without .gz extension
+        assert!(opts.is_gz(Path::new("output.txt")));
+        assert!(opts.is_gz(Path::new("output")));
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_compress_opts_is_zstd_by_extension() {
+        let opts = CompressOpts {
+            glevel: 5,
+            zlevel: 10,
+            zthreads: 2,
+            gzip: false,
+            zstd: false,
+        };
+
+        assert!(opts.is_zstd(Path::new("output.zstd")));
+        assert!(opts.is_zstd(Path::new("output.zst")));
+        assert!(!opts.is_zstd(Path::new("output.txt")));
+        assert!(!opts.is_zstd(Path::new("output.gz")));
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_compress_opts_is_zstd_forced() {
+        let opts = CompressOpts {
+            glevel: 5,
+            zlevel: 10,
+            zthreads: 2,
+            gzip: false,
+            zstd: true, // Force zstd
+        };
+
+        assert!(opts.is_zstd(Path::new("output.txt")));
+        assert!(opts.is_zstd(Path::new("output")));
+    }
+
+    #[test]
+    fn test_dump_stdout_counts_none() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: Some(PathBuf::from("output.csv")),
+            json: Some(PathBuf::from("output.json")),
+            yaml: None,
+            uniques: None,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        assert_eq!(dump.stdout_counts(), 0);
+    }
+
+    #[test]
+    fn test_dump_stdout_counts_one() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: Some(PathBuf::from("-")), // stdout
+            json: Some(PathBuf::from("output.json")),
+            yaml: None,
+            uniques: None,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        assert_eq!(dump.stdout_counts(), 1);
+    }
+
+    #[test]
+    fn test_dump_validate_multiple_stdout() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: Some(PathBuf::from("-")),
+            json: Some(PathBuf::from("-")),
+            yaml: None,
+            uniques: None,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        let count = dump.stdout_counts();
+        assert!(
+            dump.validate(count).is_err(),
+            "Should fail with multiple stdout"
+        );
+    }
+
+    #[test]
+    fn test_dump_validate_no_outputs() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: None,
+            uniques: None,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        let count = dump.stdout_counts();
+        assert!(dump.validate(count).is_err(), "Should fail with no outputs");
+    }
+
+    #[test]
+    fn test_dump_validate_valid_config() {
+        let dump = Dump {
+            csvs: true,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: None,
+            uniques: None,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 5,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        let count = dump.stdout_counts();
+        assert!(dump.validate(count).is_ok());
+    }
+
+    #[test]
+    fn test_dump_want_filename_hex_only() {
+        assert!(Dump::want_filename(OsStr::new("0123456789abcdef")));
+        assert!(Dump::want_filename(OsStr::new("ABCDEF")));
+        assert!(Dump::want_filename(OsStr::new("0")));
+        assert!(Dump::want_filename(OsStr::new("deadbeef")));
+    }
+
+    #[test]
+    fn test_dump_want_filename_invalid() {
+        assert!(!Dump::want_filename(OsStr::new("not_hex")));
+        assert!(!Dump::want_filename(OsStr::new("file.txt")));
+        assert!(!Dump::want_filename(OsStr::new("123-456")));
+        assert!(!Dump::want_filename(OsStr::new("12g34")));
+        // Note: empty string actually returns true because .all() on empty iterator is true
+        // This is technically correct behavior - no non-hex chars in an empty string!
+    }
+
+    #[test]
+    fn test_dump_cutoff_time_zero_days() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: None,
+            uniques: None,
+            pull_days: 0, // No time filter
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        assert!(dump.cutoff_time().is_none());
+    }
+
+    #[test]
+    fn test_dump_cutoff_time_with_days() {
+        let dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: None,
+            uniques: None,
+            pull_days: 30,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        let cutoff = dump.cutoff_time();
+        assert!(cutoff.is_some());
+    }
+
+    #[test]
+    fn test_filter_opts_filter() {
+        let filter_opts = FilterOpts {
+            filter_paths: Some(r"^/test/".to_string()),
+            any_flags: vec!["Modified".to_string()],
+            all_flags: vec![],
+        };
+
+        let filter = filter_opts.filter();
+        assert!(filter.path_rex.is_some());
+        assert!(filter.any_flag > 0);
+        assert_eq!(filter.all_flag, 0);
+    }
+
+    #[test]
+    fn test_filter_opts_default() {
+        let filter_opts = FilterOpts {
+            filter_paths: None,
+            any_flags: vec![],
+            all_flags: vec![],
+        };
+
+        let filter = filter_opts.filter();
+        assert!(filter.path_rex.is_none());
+        assert_eq!(filter.any_flag, 0);
+        assert_eq!(filter.all_flag, 0);
+    }
+
+    #[test]
+    fn test_stdout_path_helper() {
+        assert!(stdout_path(&Some(PathBuf::from("-"))));
+        assert!(!stdout_path(&Some(PathBuf::from("file.txt"))));
+        assert!(!stdout_path(&None));
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_compress_opts_zlvl() {
+        let opts = CompressOpts {
+            glevel: 7,
+            zlevel: 15,
+            zthreads: 4,
+            gzip: false,
+            zstd: false,
+        };
+
+        assert_eq!(opts.zlvl(), 15);
+    }
 }

@@ -54,6 +54,13 @@ fn main() -> Result<()> {
     }
 }
 
+/// Writes records to CSV format from a bus receiver
+///
+/// # Arguments
+/// * `recv` - Bus reader receiving record updates
+/// * `writer` - CSV writer to output data
+/// * `_` - Unused pretty print flag (kept for API consistency)
+/// * `flush_all` - Whether to flush after each record
 fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, flush_all: bool)
 where
     I: Write,
@@ -68,6 +75,13 @@ where
     }
 }
 
+/// Writes records to JSON format from a bus receiver
+///
+/// # Arguments
+/// * `recv` - Bus reader receiving record updates
+/// * `writer` - Writer to output JSON data
+/// * `pretty` - Whether to use pretty formatting (multi-line)
+/// * `flush_all` - Whether to flush after each record
 fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, pretty: bool, flush_all: bool)
 where
     I: Write,
@@ -78,10 +92,10 @@ where
                 error!("Couldn't serialize json: {err}");
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append newline: {err}");
+                error!("Couldn't append json newline: {err}");
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush csv: {err}");
+                error!("Couldn't flush json: {err}");
             }
         }
     } else {
@@ -90,15 +104,22 @@ where
                 error!("Couldn't serialize json: {err}");
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append newline: {err}");
+                error!("Couldn't append json newline: {err}");
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush csv: {err}");
+                error!("Couldn't flush json: {err}");
             }
         }
     }
 }
 
+/// Writes records to YAML format from a bus receiver
+///
+/// # Arguments
+/// * `recv` - Bus reader receiving record updates
+/// * `writer` - Writer to output YAML data
+/// * `_` - Unused pretty print flag (kept for API consistency)
+/// * `flush_all` - Whether to flush after each record
 fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, _: bool, flush_all: bool)
 where
     I: Write,
@@ -108,14 +129,21 @@ where
             error!("Couldn't serialize yaml: {err}");
         }
         if let Err(err) = writeln!(writer) {
-            error!("Couldn't append newline: {err}");
+            error!("Couldn't append yaml newline: {err}");
         }
         if flush_all && let Err(err) = writer.flush() {
-            error!("Couldn't flush csv: {err}");
+            error!("Couldn't flush yaml: {err}");
         }
     }
 }
 
+/// Aggregates records by path and writes unique path counts with combined flags
+///
+/// # Arguments
+/// * `recv` - Bus reader receiving record updates
+/// * `writer` - CSV writer for unique path output
+/// * `_` - Unused pretty print flag (kept for API consistency)
+/// * `_` - Unused flush_all flag (kept for API consistency)
 fn write_uniqs<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, _: bool)
 where
     I: Write,
@@ -135,6 +163,13 @@ where
     }
 }
 
+/// Checks if the given path represents stdout (indicated by "-")
+///
+/// # Arguments
+/// * `p` - Path to check
+///
+/// # Returns
+/// `true` if the path is "-", `false` otherwise
 fn path_stdout(p: &Path) -> bool {
     p.as_os_str() == "-"
 }
@@ -156,7 +191,7 @@ fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
 #[inline]
 fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = serde_yaml::to_writer(writer, &rec) {
-        error!("Error writing json rec: {err}")
+        error!("Error writing yaml rec: {err}")
     }
 }
 

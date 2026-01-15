@@ -1,3 +1,8 @@
+//! FSEvents file parsing implementation
+//!
+//! This module provides the core functionality to parse compressed FSEvents files,
+//! handling multiple file format versions and broadcasting records through a bus.
+
 use std::{
     fs::File,
     io::{BufReader, ErrorKind, prelude::*},
@@ -15,6 +20,24 @@ use crate::{
     version,
 };
 
+/// Parses an FSEvents file and broadcasts records through the provided bus
+///
+/// The file is automatically decompressed using gzip if needed.
+/// Supports multiple FSEvents versions (V1, V2, V3) within a single file.
+///
+/// # Arguments
+/// * `in_file` - Path to the FSEvents file to parse
+/// * `bus` - Message bus to broadcast parsed records
+/// * `filter` - Filter to determine which records to broadcast
+///
+/// # Returns
+/// `Ok(())` on success, or an error if the file cannot be parsed
+///
+/// # Errors
+/// Returns an error if:
+/// - The file cannot be opened or read
+/// - The file has an unsupported format version
+/// - Record lengths don't match expected values
 pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFilter) -> Result<()> {
     info!("Parsing {}", in_file.display());
     let mut reader = BufReader::new(MultiGzDecoder::new(File::open(in_file)?));
@@ -33,8 +56,11 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
 
             Ok(Some(v)) => v,
 
-            _ => {
-                return Err(eyre!("Unsupported type",));
+            Ok(None) => {
+                return Err(eyre!(
+                    "Unsupported or invalid file version for: {}",
+                    in_file.display()
+                ));
             }
         };
         let parse_fun = v.get_parser();
