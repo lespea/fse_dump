@@ -167,6 +167,7 @@ where
                     node_id,
                     #[cfg(feature = "extra_id")]
                     extra_id,
+                    file_timestamp: None,
                 },
             )))
         }

@@ -153,7 +153,7 @@ where
     for rec in recv {
         u.entry(rec.path.clone())
             .or_insert_with(uniques::UniqueCounts::default)
-            .update(rec.flag);
+            .update(rec.flag, rec.file_timestamp);
     }
 
     for (path, v) in u {

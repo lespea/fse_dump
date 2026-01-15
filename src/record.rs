@@ -8,6 +8,8 @@ use regex::Regex;
 #[cfg(feature = "hex")]
 use serde_hex::{CompactCapPfx, SerHex, SerHexOpt};
 
+use jiff::Timestamp;
+
 use crate::flags;
 
 /// Represents a file system event record from macOS fseventsd
@@ -26,6 +28,8 @@ pub struct Record {
     #[cfg(feature = "extra_id")]
     #[cfg_attr(feature = "hex", serde(with = "SerHexOpt::<CompactCapPfx>"))]
     pub extra_id: Option<u32>,
+    #[serde(skip_serializing)]
+    pub file_timestamp: Option<Timestamp>,
 }
 
 /// Filter for selecting which records to process based on path patterns and flags
@@ -120,6 +124,7 @@ mod tests {
             node_id: Some(67890),
             #[cfg(feature = "extra_id")]
             extra_id: Some(42),
+            file_timestamp: None,
         }
     }
 
