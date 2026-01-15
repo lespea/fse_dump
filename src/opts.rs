@@ -46,11 +46,11 @@ pub struct Generate {
 #[derive(Debug, Args)]
 pub struct Watch {
     /// The format the parsed files should be output to
-    #[arg(short, long, default_value = "json")]
+    #[arg(short = 'o', long, default_value = "json")]
     pub format: WatchFormat,
 
     /// If the outupt should be "pretty" formatted (multi-line)
-    #[arg(short, long)]
+    #[arg(short = 'P', long)]
     pub pretty: bool,
 
     /// The dirs to watch
@@ -158,11 +158,11 @@ pub struct FilterOpts {
     pub filter_paths: Option<String>,
 
     /// Only show entries if any of the flags are present in the operation
-    #[arg(short = 'f', long = "any-flags", conflicts_with = "all-flags")]
+    #[arg(short = 'f', long = "any-flags", conflicts_with = "all_flags")]
     pub any_flags: Vec<String>,
 
     /// Only show entries if all of the flags are present in the operation
-    #[arg(long = "all-flags", conflicts_with = "any-flags")]
+    #[arg(long = "all-flags", conflicts_with = "any_flags")]
     pub all_flags: Vec<String>,
 }
 
