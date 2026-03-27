@@ -32,7 +32,7 @@ pub struct Record {
     pub file_timestamp: Option<Timestamp>,
 }
 
-/// Custom serializer for Option<Timestamp> to produce ISO 8601 format
+/// Custom serializer for `Option<Timestamp>` to produce ISO 8601 format
 fn serialize_optional_timestamp<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,

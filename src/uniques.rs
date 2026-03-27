@@ -120,7 +120,7 @@ fn should_skip_timestamp(ts: &Option<Timestamp>) -> bool {
     ts.is_none()
 }
 
-/// Custom serializer for Option<Timestamp> to produce ISO 8601 format
+/// Custom serializer for `Option<Timestamp>` to produce ISO 8601 format
 fn serialize_optional_timestamp<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,
