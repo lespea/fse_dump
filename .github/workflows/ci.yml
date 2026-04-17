@@ -6,10 +6,25 @@ permissions:
 on: [push, pull_request]
 
 jobs:
-  build_and_test:
-    name: Test
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+        name: clippy
+      - run: cargo fmt --all -- --check
+        name: fmt
+
+  test-stable:
+    name: Test Stable
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -29,7 +44,6 @@ jobs:
           sudo apt-get install -y musl musl-dev musl-tools
 
       - uses: actions/checkout@v6
-        name: checkout
         with:
           fetch-depth: 1
 
@@ -37,21 +51,47 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
       - run: cargo test --target ${{ matrix.target }} --verbose
-        if: ${{ matrix.target != 'aarch64-apple-darwin' }}
-        name: test stable
+        name: test
+
+  test-nightly:
+    name: Test Nightly
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: install musl tools
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl musl-dev musl-tools
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       - uses: dtolnay/rust-toolchain@nightly
         with:
           target: ${{ matrix.target }}
-          components: clippy, rustfmt
 
-      - run: cargo clippy --target ${{ matrix.target }} -q
-        name: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
-      - run: cargo fmt -q
-        name: fmt
-
-      - name: test nightly
-        run: cargo test --target ${{ matrix.target }} --verbose
-        if: ${{ matrix.target != 'aarch64-apple-darwin' }}
+      - run: cargo test --target ${{ matrix.target }} --verbose
+        name: test
