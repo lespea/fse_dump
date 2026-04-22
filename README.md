@@ -131,7 +131,7 @@ fse_dump dump [OPTIONS] [FILES]...
 **Individual File Output** (creates output file next to each input file):
 
 - `--csvs` - Create `.csv` file for each FSEvents file
-- `--jsons` - Create `.json` file for each FSEvents file  
+- `--jsons` - Create `.json` file for each FSEvents file
 - `--yamls` - Create `.yaml` file for each FSEvents file
 
 **Combined Output** (all records in one file):
@@ -201,29 +201,29 @@ These options are mutually exclusive.
 
 **Available Flags**:
 
-| Flag | Description |
-|------|-------------|
-| `FolderEvent` | Event occurred on a folder |
-| `Mount` | Volume was mounted |
-| `Unmount` | Volume was unmounted |
-| `EndOfTransaction` | End of a transaction |
-| `LastHardLinkRemoved` | Last hard link to file removed |
-| `HardLink` | Hard link created |
-| `SymbolicLink` | Symbolic link created |
-| `FileEvent` | Event occurred on a file |
-| `PermissionChange` | Permissions were changed |
-| `ExtendedAttrModified` | Extended attributes modified |
-| `ExtendedAttrRemoved` | Extended attributes removed |
-| `DocumentRevisioning` | Document versioning event |
-| `ItemCloned` | Item was cloned |
-| `Created` | File/folder was created |
-| `Removed` | File/folder was removed |
-| `InodeMetaMod` | Inode metadata modified |
-| `Renamed` | File/folder was renamed |
-| `Modified` | File/folder was modified |
-| `Exchange` | Files exchanged |
-| `FinderInfoMod` | Finder info modified |
-| `FolderCreated` | Folder was created |
+| Flag                   | Description                    |
+| ---------------------- | ------------------------------ |
+| `FolderEvent`          | Event occurred on a folder     |
+| `Mount`                | Volume was mounted             |
+| `Unmount`              | Volume was unmounted           |
+| `EndOfTransaction`     | End of a transaction           |
+| `LastHardLinkRemoved`  | Last hard link to file removed |
+| `HardLink`             | Hard link created              |
+| `SymbolicLink`         | Symbolic link created          |
+| `FileEvent`            | Event occurred on a file       |
+| `PermissionChange`     | Permissions were changed       |
+| `ExtendedAttrModified` | Extended attributes modified   |
+| `ExtendedAttrRemoved`  | Extended attributes removed    |
+| `DocumentRevisioning`  | Document versioning event      |
+| `ItemCloned`           | Item was cloned                |
+| `Created`              | File/folder was created        |
+| `Removed`              | File/folder was removed        |
+| `InodeMetaMod`         | Inode metadata modified        |
+| `Renamed`              | File/folder was renamed        |
+| `Modified`             | File/folder was modified       |
+| `Exchange`             | Files exchanged                |
+| `FinderInfoMod`        | Finder info modified           |
+| `FolderCreated`        | Folder was created             |
 
 **Flag names are case-insensitive.**
 
@@ -292,9 +292,11 @@ fse_dump watch [OPTIONS] [WATCH_DIRS]...
 - `--poll` - Use polling instead of native file system events (slower but more compatible)
 
 **Compression options** (same as dump command):
+
 - `--gzip`, `--zstd`, `-l, --glevel`, `--zlevel`, `--zthreads`
 
 **Filtering options** (same as dump command):
+
 - `-p, --path-filter <REGEX>`
 - `-f, --any-flags <FLAG>...`
 - `--all-flags <FLAG>...`
@@ -367,7 +369,7 @@ Each FSEvents record contains the following fields:
 
 - `path` - Full path to the file/folder
 - `event_id` - Unique event identifier (hex format if built with `hex` feature)
-- `flags` - Human-readable flag names separated by ` | `
+- `flags` - Human-readable flag names separated by `|`
 - `alt_flags` - Alternative flag interpretation (if built with `alt_flags` feature)
 - `node_id` - Inode number (v2 and v3 only, hex format if built with `hex` feature)
 - `extra_id` - Additional ID (v3 only, requires `extra_id` feature)
@@ -391,6 +393,7 @@ path,counts,flags
 ### Filtering Complex Scenarios
 
 **Find all deletions in user directories**:
+
 ```bash
 fse_dump dump --json deletions.json \
   -p "^/Users/" \
@@ -398,12 +401,14 @@ fse_dump dump --json deletions.json \
 ```
 
 **Find renamed files (with old and new names)**:
+
 ```bash
 fse_dump dump --json renames.json \
   -f Renamed
 ```
 
 **Monitor system configuration changes**:
+
 ```bash
 fse_dump dump --json system_changes.json \
   -p "^/(System|Library|etc)/" \
@@ -411,6 +416,7 @@ fse_dump dump --json system_changes.json \
 ```
 
 **Find cloned/copied files**:
+
 ```bash
 fse_dump dump --json clones.json \
   -f ItemCloned
@@ -419,6 +425,7 @@ fse_dump dump --json clones.json \
 ### Combining with Other Tools
 
 **jq for JSON processing**:
+
 ```bash
 # Extract just the paths
 fse_dump dump --json - | jq -r '.path'
@@ -431,6 +438,7 @@ fse_dump dump --json - | jq -r '.flags' | sort | uniq -c
 ```
 
 **grep/awk for quick filtering**:
+
 ```bash
 # Find all PDF operations
 fse_dump dump --json - | grep '\.pdf"'
@@ -450,12 +458,14 @@ fse_dump dump --csv - | awk -F',' '$3 ~ /Created/ {print $1}'
 ### Forensics Use Cases
 
 **Timeline analysis**:
+
 ```bash
 # Export everything from last 7 days
 fse_dump dump --days 7 --json timeline.json.gz
 ```
 
 **Malware detection** (find suspicious file operations):
+
 ```bash
 # Find new executables
 fse_dump dump --json suspicious.json \
@@ -469,6 +479,7 @@ fse_dump dump --json hidden.json \
 ```
 
 **Data exfiltration** (find removable media):
+
 ```bash
 # Monitor mounts/unmounts
 fse_dump dump --json removable.json \
@@ -476,6 +487,7 @@ fse_dump dump --json removable.json \
 ```
 
 **User activity**:
+
 ```bash
 # Monitor specific user's home directory
 fse_dump dump --json user_activity.json \
