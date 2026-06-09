@@ -171,7 +171,7 @@ pub struct FilterOpts {
 }
 
 impl FilterOpts {
-    pub fn filter(&self) -> RecordFilter {
+    pub fn filter(&self) -> Result<RecordFilter> {
         RecordFilter::new(&self.filter_paths, &self.any_flags, &self.all_flags)
     }
 }
@@ -856,7 +856,7 @@ mod tests {
             all_flags: vec![],
         };
 
-        let filter = filter_opts.filter();
+        let filter = filter_opts.filter().unwrap();
         assert!(filter.path_rex.is_some());
         assert!(filter.any_flag > 0);
         assert_eq!(filter.all_flag, 0);
@@ -870,7 +870,7 @@ mod tests {
             all_flags: vec![],
         };
 
-        let filter = filter_opts.filter();
+        let filter = filter_opts.filter().unwrap();
         assert!(filter.path_rex.is_none());
         assert_eq!(filter.any_flag, 0);
         assert_eq!(filter.all_flag, 0);

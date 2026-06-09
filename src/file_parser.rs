@@ -153,7 +153,7 @@ mod tests {
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         // Filter for paths containing "Library"
-        let filter = RecordFilter::new(&Some("Library".to_string()), &[], &[]);
+        let filter = RecordFilter::new(&Some("Library".to_string()), &[], &[]).unwrap();
 
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
@@ -183,7 +183,7 @@ mod tests {
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         // Filter for Modified flag
-        let filter = RecordFilter::new(&None, &["Modified".to_string()], &[]);
+        let filter = RecordFilter::new(&None, &["Modified".to_string()], &[]).unwrap();
 
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
@@ -216,7 +216,8 @@ mod tests {
             &None,
             &[],
             &["FileEvent".to_string(), "Modified".to_string()],
-        );
+        )
+        .unwrap();
 
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
@@ -250,7 +251,8 @@ mod tests {
             &Some(r"\.(log|txt|plist)$".to_string()),
             &["Created".to_string(), "Modified".to_string()],
             &[],
-        );
+        )
+        .unwrap();
 
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
@@ -286,7 +288,8 @@ mod tests {
             &Some(r"^/this/path/definitely/does/not/exist/in/the/test/file/xyz123$".to_string()),
             &[],
             &[],
-        );
+        )
+        .unwrap();
 
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);

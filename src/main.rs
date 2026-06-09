@@ -365,7 +365,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         ..
     } = opts;
 
-    let rec_filter = opts.filter_opts.filter();
+    let rec_filter = opts.filter_opts.filter()?;
 
     let copts = opts.compress_opts;
 
@@ -518,7 +518,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     color_eyre::install()?;
 
-    let rec_filter = opts.filter_opts.filter();
+    let rec_filter = opts.filter_opts.filter()?;
 
     let (send, recv) = crossbeam_channel::bounded(128);
 

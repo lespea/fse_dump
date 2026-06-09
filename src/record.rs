@@ -4,11 +4,11 @@
 //! and the `RecordFilter` for selectively processing records based on path patterns
 //! and flag criteria.
 
+use color_eyre::eyre;
+use jiff::Timestamp;
 use regex::Regex;
 #[cfg(feature = "hex")]
 use serde_hex::{CompactCapPfx, SerHex, SerHexOpt};
-
-use jiff::Timestamp;
 
 use crate::flags;
 
@@ -47,7 +47,7 @@ where
 }
 
 /// Filter for selecting which records to process based on path patterns and flags
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct RecordFilter {
     pub path_rex: Option<Regex>,
     pub any_flag: u32,
@@ -61,30 +61,32 @@ impl RecordFilter {
     /// * `pat` - Optional regex pattern to match against file paths
     /// * `any_flags` - List of flag names where at least one must be present
     /// * `all_flags` - List of flag names where all must be present
-    ///
-    /// # Panics
-    /// Panics if an unknown flag name is provided
-    pub fn new(pat: &Option<String>, any_flags: &[String], all_flags: &[String]) -> Self {
+    pub fn new(
+        pat: &Option<String>,
+        any_flags: &[String],
+        all_flags: &[String],
+    ) -> color_eyre::Result<Self> {
         let mut any_flag = 0;
         let mut all_flag = 0;
 
         for flag in any_flags.iter() {
             any_flag |=
-                flags::flag_id(flag).unwrap_or_else(|| panic!("Unknown any flag id: {flag}"));
+                flags::flag_id(flag).ok_or_else(|| eyre::eyre!("Unknown any flag id: {flag}"))?;
         }
 
         for flag in all_flags.iter() {
             all_flag |=
-                flags::flag_id(flag).unwrap_or_else(|| panic!("Unknown all flag id: {flag}"));
+                flags::flag_id(flag).ok_or_else(|| eyre::eyre!("Unknown all flag id: {flag}"))?;
         }
 
-        Self {
+        Ok(Self {
             path_rex: pat
                 .as_ref()
-                .map(|pat| Regex::new(pat).expect("Invalid pattern")),
+                .map(|pat| Regex::new(pat).map_err(|e| eyre::eyre!("Invalid pattern: {e}")))
+                .transpose()?,
             any_flag,
             all_flag,
-        }
+        })
     }
 
     /// Determines if a record should be included based on the filter criteria
@@ -163,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_filter_path_regex_match() {
-        let filter = RecordFilter::new(&Some(r"^/usr/local/.*".to_string()), &[], &[]);
+        let filter = RecordFilter::new(&Some(r"^/usr/local/.*".to_string()), &[], &[]).unwrap();
 
         let rec1 = make_record("/usr/local/bin/test", 0x1000_0000);
         let rec2 = make_record("/usr/bin/test", 0x1000_0000);
@@ -176,7 +178,7 @@ mod tests {
 
     #[test]
     fn test_filter_path_regex_case_sensitive() {
-        let filter = RecordFilter::new(&Some(r"Test".to_string()), &[], &[]);
+        let filter = RecordFilter::new(&Some(r"Test".to_string()), &[], &[]).unwrap();
 
         let rec1 = make_record("/path/Test/file", 0x1000_0000);
         let rec2 = make_record("/path/test/file", 0x1000_0000);
@@ -190,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_filter_any_flags_single() {
-        let filter = RecordFilter::new(&None, &["Modified".to_string()], &[]);
+        let filter = RecordFilter::new(&None, &["Modified".to_string()], &[]).unwrap();
 
         let rec1 = make_record("/test", 0x1000_0000); // Modified
         let rec2 = make_record("/test", 0x0800_0000); // Renamed
@@ -210,7 +212,8 @@ mod tests {
     #[test]
     fn test_filter_any_flags_multiple() {
         let filter =
-            RecordFilter::new(&None, &["Modified".to_string(), "Created".to_string()], &[]);
+            RecordFilter::new(&None, &["Modified".to_string(), "Created".to_string()], &[])
+                .unwrap();
 
         let rec1 = make_record("/test", 0x1000_0000); // Modified
         let rec2 = make_record("/test", 0x0100_0000); // Created
@@ -225,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_filter_all_flags_single() {
-        let filter = RecordFilter::new(&None, &[], &["Modified".to_string()]);
+        let filter = RecordFilter::new(&None, &[], &["Modified".to_string()]).unwrap();
 
         let rec1 = make_record("/test", 0x1000_0000); // Modified
         let rec2 = make_record("/test", 0x0800_0000); // Renamed
@@ -248,7 +251,8 @@ mod tests {
             &None,
             &[],
             &["Modified".to_string(), "FileEvent".to_string()],
-        );
+        )
+        .unwrap();
 
         let rec1 = make_record("/test", 0x1000_0000); // Modified only
         let rec2 = make_record("/test", 0x0000_8000); // FileEvent only
@@ -270,7 +274,8 @@ mod tests {
     #[test]
     fn test_filter_combined_path_and_flags() {
         let filter =
-            RecordFilter::new(&Some(r"\.txt$".to_string()), &["Modified".to_string()], &[]);
+            RecordFilter::new(&Some(r"\.txt$".to_string()), &["Modified".to_string()], &[])
+                .unwrap();
 
         let rec1 = make_record("/test/file.txt", 0x1000_0000); // Matches both
         let rec2 = make_record("/test/file.txt", 0x0800_0000); // Matches path only
@@ -289,7 +294,8 @@ mod tests {
             &Some(r"^/Users/[^/]+/Documents/".to_string()),
             &["Created".to_string(), "Removed".to_string()],
             &["FileEvent".to_string()],
-        );
+        )
+        .unwrap();
 
         // Has FileEvent and Created, matches path
         let rec1 = make_record("/Users/john/Documents/test.txt", 0x0100_8000);
@@ -323,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_filter_empty_path_filter() {
-        let filter = RecordFilter::new(&Some("".to_string()), &[], &[]);
+        let filter = RecordFilter::new(&Some("".to_string()), &[], &[]).unwrap();
 
         let rec = make_record("/any/path", 0x1000_0000);
         assert!(filter.want(&rec), "Empty regex should match all paths");
@@ -331,28 +337,41 @@ mod tests {
 
     #[test]
     fn test_filter_zero_flag() {
-        let filter = RecordFilter::new(&None, &[], &[]);
+        let filter = RecordFilter::new(&None, &[], &[]).unwrap();
 
         let rec = make_record("/test", 0x0000_0000);
         assert!(filter.want(&rec), "Should match record with no flags set");
     }
 
     #[test]
-    #[should_panic(expected = "Unknown any flag id")]
     fn test_filter_invalid_any_flag() {
-        RecordFilter::new(&None, &["InvalidFlagName".to_string()], &[]);
+        let result = RecordFilter::new(&None, &["InvalidFlagName".to_string()], &[]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown any flag id")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Unknown all flag id")]
     fn test_filter_invalid_all_flag() {
-        RecordFilter::new(&None, &[], &["AnotherInvalidFlag".to_string()]);
+        let result = RecordFilter::new(&None, &[], &["AnotherInvalidFlag".to_string()]);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown all flag id")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Invalid pattern")]
     fn test_filter_invalid_regex() {
-        RecordFilter::new(&Some("[invalid(".to_string()), &[], &[]);
+        let result = RecordFilter::new(&Some("[invalid(".to_string()), &[], &[]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid pattern"));
     }
 
     #[test]
