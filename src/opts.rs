@@ -99,7 +99,8 @@ pub struct Dump {
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
     ///
-    /// If the path ends in `.gz` it will be gzip compressed
+    /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
+    /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
     pub csv: Option<PathBuf>,
 
@@ -110,7 +111,8 @@ pub struct Dump {
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
     ///
-    /// If the path ends in `.gz` it will be gzip compressed
+    /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
+    /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
     pub json: Option<PathBuf>,
 
@@ -121,7 +123,8 @@ pub struct Dump {
     ///
     /// If parallel is enabled than there is no guarantee of order (even within a single file)
     ///
-    /// If the path ends in `.gz` it will be gzip compressed
+    /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
+    /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
     pub yaml: Option<PathBuf>,
 
@@ -129,11 +132,12 @@ pub struct Dump {
     ///
     /// We'll combine all of the operations for each path so there is one entry per path
     ///
-    /// If the path ends in `.gz` it will be gzip compressed
+    /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
+    /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
     pub uniques: Option<PathBuf>,
 
-    /// Include earliest/latest timestamps in unique CSV output (always included in JSON/YAML)
+    /// Include earliest/latest timestamps in unique CSV output
     #[arg(long = "unique-timestamps")]
     pub unique_timestamps: bool,
 

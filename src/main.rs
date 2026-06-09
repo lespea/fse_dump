@@ -218,14 +218,17 @@ fn path_stdout(p: &Path) -> bool {
 #[inline]
 fn icsv(rec: Arc<Record>, writer: &mut Writer<BufWriter<File>>) {
     if let Err(err) = writer.serialize(&rec) {
-        error!("Error writing json rec: {err}")
+        error!("Error writing csv rec: {err}")
     }
 }
 
 #[inline]
 fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
-    if let Err(err) = serde_json::to_writer(writer, &rec) {
+    if let Err(err) = serde_json::to_writer(&mut *writer, &rec) {
         error!("Error writing json rec: {err}")
+    }
+    if let Err(err) = writeln!(writer) {
+        error!("Error writing json newline: {err}")
     }
 }
 

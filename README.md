@@ -363,7 +363,8 @@ Each FSEvents record contains the following fields:
   "event_id": "0x12ab34cd",
   "flags": "FileEvent | Modified",
   "node_id": "0x56ef78",
-  "extra_id": "0x9abc"
+  "extra_id": "0x9abc",
+  "file_timestamp": "2023-05-24T10:30:00Z"
 }
 ```
 
@@ -373,20 +374,39 @@ Each FSEvents record contains the following fields:
 - `alt_flags` - Alternative flag interpretation (if built with `alt_flags` feature)
 - `node_id` - Inode number (v2 and v3 only, hex format if built with `hex` feature)
 - `extra_id` - Additional ID (v3 only, requires `extra_id` feature)
+- `file_timestamp` - Modification time of the source FSEvents file (ISO 8601)
 
 ### Unique Output Format
 
-The `--uniques` option produces aggregated records:
+The `--uniques` option produces aggregated records (CSV format):
 
 ```csv
-path,counts,flags
-/Users/alice/file.txt,5,"FileEvent | Modified | Created"
-/Users/alice/Documents,3,"FolderEvent | Modified"
+path,counts,flags,earliest_timestamp,latest_timestamp
+/Users/alice/file.txt,5,"FileEvent | Modified | Created",2023-05-24T10:30:00Z,2023-05-24T11:45:00Z
+/Users/alice/Documents,3,"FolderEvent | Modified",2023-05-24T09:15:00Z,2023-05-24T10:00:00Z
 ```
 
 - `path` - The file/folder path
 - `counts` - Number of events for this path
 - `flags` - Combined flags (bitwise OR of all events)
+- `alt_flags` - Combined alternative flags (if built with `alt_flags` feature)
+- `earliest_timestamp` - Earliest event time (requires `--unique-timestamps`)
+- `latest_timestamp` - Latest event time (requires `--unique-timestamps`)
+
+### YAML Output Format
+
+When exporting to YAML, **fse_dump** produces a multi-document stream, where each record is separated by `---`. This allows for efficient streaming processing of large outputs.
+
+```yaml
+---
+path: /Users/alice/file.txt
+event_id: 0x123
+flags: Created
+---
+path: /Users/alice/file.txt
+event_id: 0x124
+flags: Modified
+```
 
 ## Advanced Usage
 
