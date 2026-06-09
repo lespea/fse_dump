@@ -5,7 +5,7 @@
 
 use std::io::{self, prelude::*};
 
-use byteorder::{BigEndian, LittleEndian, NativeEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 use crate::{flags, record::Record};
 
@@ -150,7 +150,7 @@ where
             #[allow(unused_variables)]
             let extra_id = if Self::HAS_UNKNOWN_NUM {
                 tlen += 4;
-                Some(reader.read_u32::<NativeEndian>()?)
+                Some(reader.read_u32::<LittleEndian>()?)
             } else {
                 None
             };
