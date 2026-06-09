@@ -328,7 +328,7 @@ macro_rules! idump {
 
 #[inline]
 fn new_bus() -> Bus<Arc<Record>> {
-    Bus::new(512)
+    Bus::new(4096)
 }
 
 fn dump(opts: opts::Dump) -> Result<()> {
