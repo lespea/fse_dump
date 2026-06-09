@@ -125,6 +125,9 @@ where
     I: Write,
 {
     for rec in recv {
+        if let Err(err) = writeln!(writer, "---") {
+            error!("Couldn't write yaml separator: {err}");
+        }
         if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
             error!("Couldn't serialize yaml: {err}");
         }
@@ -228,8 +231,14 @@ fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
 
 #[inline]
 fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
-    if let Err(err) = serde_yaml::to_writer(writer, &rec) {
+    if let Err(err) = writeln!(writer, "---") {
+        error!("Error writing yaml separator: {err}")
+    }
+    if let Err(err) = serde_yaml::to_writer(&mut *writer, &rec) {
         error!("Error writing yaml rec: {err}")
+    }
+    if let Err(err) = writeln!(writer) {
+        error!("Error writing yaml newline: {err}")
     }
 }
 
