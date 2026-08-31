@@ -38,7 +38,7 @@ crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"
-flate2 = { version = "1", default-features = false, features = ["cloudflare_zlib"] }
+flate2 = { version = "1", default-features = false, features = ["zlib-ng"] }
 hashbrown = "0"
 jiff = "0"
 log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
