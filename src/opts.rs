@@ -37,7 +37,7 @@ pub enum Commands {
 
 #[derive(Debug, Args)]
 pub struct Generate {
-    /// If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
+    /// The shell to generate completions for
     #[arg(value_parser = value_parser!(Shell))]
     pub shell: Shell,
 }
@@ -49,7 +49,7 @@ pub struct Watch {
     #[arg(short = 'o', long, default_value = "json")]
     pub format: WatchFormat,
 
-    /// If the outupt should be "pretty" formatted (multi-line)
+    /// If the output should be "pretty" formatted (multi-line)
     #[arg(short = 'P', long)]
     pub pretty: bool,
 
@@ -97,8 +97,6 @@ pub struct Dump {
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
     ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
@@ -109,8 +107,6 @@ pub struct Dump {
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
     ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
@@ -120,8 +116,6 @@ pub struct Dump {
     ///
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
-    ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
     ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
