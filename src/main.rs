@@ -497,6 +497,7 @@ fn generate(g: Generate) -> Result<()> {
 fn watch(opts: opts::Watch) -> Result<()> {
     use std::{mem, time::Duration};
 
+    use crossbeam_channel::RecvTimeoutError;
     use notify_debouncer_full::{
         DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
     };
@@ -512,6 +513,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     color_eyre::install()?;
 
+    opts.compress_opts.validate()?;
     let rec_filter = opts.filter_opts.filter()?;
 
     let (send, recv) = crossbeam_channel::bounded(128);
@@ -588,7 +590,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
         let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
-        fscope.spawn(move || {
+        let writer = fscope.spawn(move || {
             let out = copts.make_stdout();
 
             match opts.format {
@@ -600,11 +602,26 @@ fn watch(opts: opts::Watch) -> Result<()> {
             }
         });
 
-        for path in recv {
-            if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
-                fail!("Error parsing {}: {err}", path.display());
+        loop {
+            match recv.recv_timeout(Duration::from_millis(500)) {
+                Ok(path) => {
+                    if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
+                        fail!("Error parsing {}: {err}", path.display());
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => {
+                    // Nothing to write to any more; keeping the watch alive would only hide it
+                    if writer.is_finished() {
+                        fail!("The output writer stopped unexpectedly");
+                        break;
+                    }
+                }
+                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
+
+        // Closing the bus is what lets the writer flush and finish its stream
+        drop(bus);
     });
 
     finish("watching")
