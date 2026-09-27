@@ -590,20 +590,128 @@ mod tests {
     }
 
     #[test]
-    fn test_uncompressed_file() {
-        let mut bus = Bus::new(4096);
-        let path: PathBuf = "testfiles/v3/000000000342c4f2".into();
+    fn test_uncompressed_input_is_rejected() {
+        // fseventsd always gzips its logs; a raw page must fail clearly rather than parse as junk
+        let page = encode_page(b"2SLD", &[FakeRec("/a", 1, 0x1000_0000, Some(10), None)]);
+        let dir = std::env::temp_dir().join(format!("fse_dump-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("uncompressed_v2");
+        std::fs::write(&path, page).unwrap();
 
-        // MultiGzDecoder should handle uncompressed files too
-        let result = parse_file(&path, &mut bus, &RecordFilter::default());
+        let mut bus = Bus::new(16);
+        let err = parse_file(&path, &mut bus, &RecordFilter::default())
+            .expect_err("an uncompressed page is not a valid log");
+        assert!(
+            err.to_string().contains("gzip"),
+            "error should mention gzip: {err}"
+        );
+    }
 
-        // This should also work since MultiGzDecoder handles both compressed and uncompressed
-        if result.is_ok() {
-            // Great, it worked!
-        } else {
-            // Some versions might not handle this, which is also acceptable
-            // Just check that it fails gracefully
-            assert!(result.is_err());
-        }
+    #[test]
+    fn test_v1_page() {
+        let recs = [
+            FakeRec("/v1/created", 0x10, 0x0100_8000, None, None),
+            FakeRec("/v1/folder", 0x11, 0x0000_0001, None, None),
+        ];
+        let path = write_fixture("v1", &encode_page(b"1SLD", &recs), None);
+
+        let mut bus = Bus::new(16);
+        let recv = bus.add_rx();
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("v1 parses");
+        drop(bus);
+
+        let got = records(recv);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].path, "/v1/created");
+        assert_eq!(got[0].event_id, 0x10);
+        assert_eq!(got[0].flags, "FileEvent | Created");
+        assert_eq!(got[0].node_id, None);
+        assert_eq!(got[1].flags, "FolderEvent");
+    }
+
+    #[test]
+    fn test_v2_page() {
+        let recs = [
+            FakeRec("/v2/a", 0x20, 0x1000_8000, Some(0xABCD), None),
+            FakeRec("/v2/b", 0x21, 0x0200_0001, Some(0xEF01), None),
+        ];
+        let path = write_fixture("v2", &encode_page(b"2SLD", &recs), None);
+
+        let mut bus = Bus::new(16);
+        let recv = bus.add_rx();
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("v2 parses");
+        drop(bus);
+
+        let got = records(recv);
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].event_id, 0x20);
+        assert_eq!(got[0].flags, "FileEvent | Modified");
+        assert_eq!(got[0].node_id, Some(0xABCD));
+        assert_eq!(got[1].node_id, Some(0xEF01));
+        assert_eq!(got[1].flags, "FolderEvent | Removed");
+    }
+
+    #[test]
+    fn test_multiple_pages_in_one_file() {
+        let mut raw = encode_page(b"3SLD", &[FakeRec("/p1", 1, 0x1000_0000, Some(1), Some(0))]);
+        raw.extend(encode_page(
+            b"3SLD",
+            &[
+                FakeRec("/p2/a", 2, 0x1000_0000, Some(2), Some(501)),
+                FakeRec("/p2/b", 3, 0x1000_0000, Some(3), Some(501)),
+            ],
+        ));
+        let path = write_fixture("v3_two_pages", &raw, None);
+
+        let mut bus = Bus::new(16);
+        let recv = bus.add_rx();
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("two pages parse");
+        drop(bus);
+
+        let got = records(recv);
+        let paths: Vec<_> = got.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(paths, ["/p1", "/p2/a", "/p2/b"]);
+        assert_eq!(
+            got.iter().map(|r| r.event_id).collect::<Vec<_>>(),
+            [1, 2, 3]
+        );
+        #[cfg(feature = "extra_id")]
+        assert_eq!(got[2].extra_id, Some(501));
+    }
+
+    #[test]
+    fn test_unknown_version_is_an_error() {
+        let path = write_fixture("v9", &encode_page(b"9SLD", &[]), None);
+        let mut bus = Bus::new(16);
+        let err = parse_file(&path, &mut bus, &RecordFilter::default())
+            .expect_err("unknown magic must fail");
+        assert!(err.to_string().contains("Unsupported"), "{err}");
+    }
+
+    #[test]
+    fn test_filtered_last_record_still_ends_page_cleanly() {
+        // The last record on a page takes a different code path; make sure filtering it out
+        // neither drops the earlier records nor breaks the page accounting
+        let mut raw = encode_page(
+            b"2SLD",
+            &[
+                FakeRec("/keep", 1, 0x1000_0000, Some(1), None),
+                FakeRec("/drop", 2, 0x1000_0000, Some(2), None),
+            ],
+        );
+        raw.extend(encode_page(
+            b"2SLD",
+            &[FakeRec("/keep2", 3, 0x1000_0000, Some(3), None)],
+        ));
+        let path = write_fixture("v2_filter_last", &raw, None);
+
+        let filter = RecordFilter::new(&Some("keep".to_string()), &[], &[]).unwrap();
+        let mut bus = Bus::new(16);
+        let recv = bus.add_rx();
+        parse_file(&path, &mut bus, &filter).expect("parses");
+        drop(bus);
+
+        let paths: Vec<_> = records(recv).iter().map(|r| r.path.clone()).collect();
+        assert_eq!(paths, ["/keep", "/keep2"]);
     }
 }
