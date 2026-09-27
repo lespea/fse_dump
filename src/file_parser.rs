@@ -82,9 +82,26 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
         let mut read = 12usize;
 
         loop {
-            let mut rec = match parse_fun(&mut reader)? {
-                None => break,
-                Some((s, rec)) => {
+            let mut rec = match parse_fun(&mut reader) {
+                // Ran out of bytes part way through a record's fixed-width fields
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                    warn!(
+                        "{}: file ended inside a record after {read} of {p_len} page bytes; the file is truncated or corrupt",
+                        in_file.display()
+                    );
+                    return Ok(());
+                }
+                Err(e) => return Err(e.into()),
+                Ok(None) => {
+                    if read < p_len {
+                        warn!(
+                            "{}: page ended after {read} of {p_len} bytes; the file is truncated or corrupt",
+                            in_file.display()
+                        );
+                    }
+                    break;
+                }
+                Ok(Some((s, rec))) => {
                     debug!("Read {s} bits");
                     read += s;
                     rec
@@ -124,13 +141,80 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{io::Write, path::PathBuf};
 
     use bus::Bus;
 
     use crate::record::RecordFilter;
 
     use super::parse_file;
+
+    /// One synthetic record: path, event id, flag word (big-endian view), node id, extra id
+    pub(crate) struct FakeRec(
+        pub &'static str,
+        pub u64,
+        pub u32,
+        pub Option<u64>,
+        pub Option<u32>,
+    );
+
+    /// Encode the records as a single page of the given version
+    pub(crate) fn encode_page(magic: &[u8; 4], recs: &[FakeRec]) -> Vec<u8> {
+        let mut body = Vec::new();
+        for FakeRec(path, id, flag, node, extra) in recs {
+            body.extend_from_slice(path.as_bytes());
+            body.push(0);
+            body.extend_from_slice(&id.to_le_bytes());
+            body.extend_from_slice(&flag.to_be_bytes());
+            if let Some(n) = node {
+                body.extend_from_slice(&n.to_le_bytes());
+            }
+            if let Some(e) = extra {
+                body.extend_from_slice(&e.to_le_bytes());
+            }
+        }
+
+        let mut page = Vec::with_capacity(12 + body.len());
+        page.extend_from_slice(magic);
+        page.extend_from_slice(&[0u8; 4]);
+        page.extend_from_slice(&((12 + body.len()) as u32).to_le_bytes());
+        page.extend_from_slice(&body);
+        page
+    }
+
+    /// Gzip `raw` (optionally truncated to `keep` bytes first) into a fresh temp file
+    pub(crate) fn write_fixture(name: &str, raw: &[u8], keep: Option<usize>) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("fse_dump-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+
+        let raw = &raw[..keep.unwrap_or(raw.len())];
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(raw).unwrap();
+        std::fs::write(&path, gz.finish().unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_truncated_page_returns_partial_records() {
+        let recs = [
+            FakeRec("/a", 1, 0x1000_0000, Some(10), None),
+            FakeRec("/b", 2, 0x1000_0000, Some(11), None),
+            FakeRec("/c", 3, 0x1000_0000, Some(12), None),
+        ];
+        let page = encode_page(b"2SLD", &recs);
+        // Chop the file part way through the last record's fixed-width fields
+        let path = write_fixture("truncated_v2", &page, Some(page.len() - 5));
+
+        let mut bus = Bus::new(16);
+        let mut recv = bus.add_rx();
+        parse_file(&path, &mut bus, &RecordFilter::default())
+            .expect("a truncated page is reported, not fatal");
+        drop(bus);
+
+        let paths: Vec<_> = recv.iter().map(|r| r.path.clone()).collect();
+        assert_eq!(paths, vec!["/a", "/b"]);
+    }
 
     #[test]
     fn test_v3() {
