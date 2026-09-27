@@ -17,7 +17,7 @@ use flate2::read::MultiGzDecoder;
 use jiff::Timestamp;
 
 use crate::{
-    record::{Record, RecordFilter},
+    record::{BusMsg, RecordFilter},
     version,
 };
 
@@ -39,7 +39,7 @@ use crate::{
 /// - The file cannot be opened or read
 /// - The file has an unsupported format version
 /// - Record lengths don't match expected values
-pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFilter) -> Result<()> {
+pub fn parse_file(in_file: &Path, bus: &mut Bus<BusMsg>, filter: &RecordFilter) -> Result<()> {
     info!("Parsing {}", in_file.display());
 
     // Get file modification time
@@ -117,7 +117,7 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
                     debug!("Wanted len");
                     // Still broadcast if filter accepts it
                     if filter.want(&rec) {
-                        bus.broadcast(Arc::new(rec));
+                        bus.broadcast(BusMsg::Record(Arc::new(rec)));
                     } else {
                         debug!("Skipping {rec:?} due to the filters");
                     }
@@ -132,7 +132,7 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
                 continue;
             }
 
-            bus.broadcast(Arc::new(rec));
+            bus.broadcast(BusMsg::Record(Arc::new(rec)));
         }
     }
 
@@ -141,13 +141,18 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<Arc<Record>>, filter: &RecordFil
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Write, path::PathBuf};
+    use std::{io::Write, path::PathBuf, sync::Arc};
 
-    use bus::Bus;
+    use bus::{Bus, BusReader};
 
-    use crate::record::RecordFilter;
+    use crate::record::{BusMsg, Record, RecordFilter};
 
     use super::parse_file;
+
+    /// Drain a reader, keeping only the records
+    fn records(recv: BusReader<BusMsg>) -> Vec<Arc<Record>> {
+        recv.into_iter().filter_map(BusMsg::into_record).collect()
+    }
 
     /// One synthetic record: path, event id, flag word (big-endian view), node id, extra id
     pub(crate) struct FakeRec(
@@ -207,32 +212,32 @@ mod tests {
         let path = write_fixture("truncated_v2", &page, Some(page.len() - 5));
 
         let mut bus = Bus::new(16);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
         parse_file(&path, &mut bus, &RecordFilter::default())
             .expect("a truncated page is reported, not fatal");
         drop(bus);
 
-        let paths: Vec<_> = recv.iter().map(|r| r.path.clone()).collect();
+        let paths: Vec<_> = records(recv).iter().map(|r| r.path.clone()).collect();
         assert_eq!(paths, vec!["/a", "/b"]);
     }
 
     #[test]
     fn test_v3() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't find test file");
         drop(bus);
 
-        let count = recv.iter().count();
+        let count = records(recv).len();
         assert_eq!(count, 2730);
     }
 
     #[test]
     fn test_v3_with_path_filter() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
@@ -242,7 +247,7 @@ mod tests {
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
         let count = records.len();
 
         // Should be fewer than total (2730)
@@ -262,7 +267,7 @@ mod tests {
     #[test]
     fn test_v3_with_flag_filter() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
@@ -272,7 +277,7 @@ mod tests {
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
         let count = records.len();
 
         assert!(count > 0, "Should find some Modified records");
@@ -291,7 +296,7 @@ mod tests {
     #[test]
     fn test_v3_with_all_flags_filter() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
@@ -306,7 +311,7 @@ mod tests {
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Verify all records have both flags
         for rec in records {
@@ -326,7 +331,7 @@ mod tests {
     #[test]
     fn test_v3_with_combined_filters() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
@@ -341,7 +346,7 @@ mod tests {
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Verify all records match both filters
         for rec in records {
@@ -363,7 +368,7 @@ mod tests {
     #[test]
     fn test_v3_filter_returns_no_matches() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
@@ -378,21 +383,21 @@ mod tests {
         parse_file(&path, &mut bus, &filter).expect("Couldn't parse test file");
         drop(bus);
 
-        let count = recv.iter().count();
+        let count = records(recv).len();
         assert_eq!(count, 0, "Filter should exclude all records");
     }
 
     #[test]
     fn test_v3_collect_specific_data() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Test that we can access record fields
         assert!(!records.is_empty());
@@ -422,7 +427,7 @@ mod tests {
     #[test]
     fn test_v3_event_ids_match_filename() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         // fseventsd names a log after the event id that follows its last record, so every id
         // inside `000000000342c4f2` must be below 0x342c4f2 (and, for a full log, close to it).
@@ -430,29 +435,35 @@ mod tests {
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let ids: Vec<u64> = recv.iter().map(|r| r.event_id).collect();
+        let ids: Vec<u64> = records(recv).iter().map(|r| r.event_id).collect();
         let max = *ids.iter().max().unwrap();
         let min = *ids.iter().min().unwrap();
 
-        assert!(max < 0x342c4f2, "max event id {max:#x} should be below the file name");
-        assert!(min > 0x3420000, "min event id {min:#x} should be near the file name");
+        assert!(
+            max < 0x342c4f2,
+            "max event id {max:#x} should be below the file name"
+        );
+        assert!(
+            min > 0x3420000,
+            "min event id {min:#x} should be near the file name"
+        );
     }
 
     #[test]
     fn test_v3_multiple_receivers() {
         let mut bus = Bus::new(4096);
-        let mut recv1 = bus.add_rx();
-        let mut recv2 = bus.add_rx();
-        let mut recv3 = bus.add_rx();
+        let recv1 = bus.add_rx();
+        let recv2 = bus.add_rx();
+        let recv3 = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let count1 = recv1.iter().count();
-        let count2 = recv2.iter().count();
-        let count3 = recv3.iter().count();
+        let count1 = records(recv1).len();
+        let count2 = records(recv2).len();
+        let count3 = records(recv3).len();
 
         // All receivers should get the same number of records
         assert_eq!(count1, 2730);
@@ -463,14 +474,14 @@ mod tests {
     #[test]
     fn test_v3_arc_sharing() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Test that Arc cloning works as expected
         if let Some(first_rec) = records.first() {
@@ -493,14 +504,14 @@ mod tests {
     #[test]
     fn test_v3_check_node_ids() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // V3 files should have node_id populated
         let has_node_ids = records.iter().any(|r| r.node_id.is_some());
@@ -518,14 +529,14 @@ mod tests {
     #[test]
     fn test_v3_check_extra_ids() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // V3 files should have extra_id populated
         let has_extra_ids = records.iter().any(|r| r.extra_id.is_some());
@@ -535,14 +546,14 @@ mod tests {
     #[test]
     fn test_v3_path_variety() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Collect unique paths
         let unique_paths: std::collections::HashSet<_> =
@@ -559,14 +570,14 @@ mod tests {
     #[test]
     fn test_v3_flag_variety() {
         let mut bus = Bus::new(4096);
-        let mut recv = bus.add_rx();
+        let recv = bus.add_rx();
 
         let path: PathBuf = "testfiles/v3/test_1.gz".into();
 
         parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
         drop(bus);
 
-        let records: Vec<_> = recv.iter().collect();
+        let records = records(recv);
 
         // Collect unique flag combinations
         let unique_flags: std::collections::HashSet<_> = records.iter().map(|r| r.flags).collect();

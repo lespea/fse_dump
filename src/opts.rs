@@ -728,11 +728,17 @@ mod tests {
             },
         };
 
-        assert!(dump.validate(dump.stdout_counts()).is_ok(), "--yaml alone is a valid output");
+        assert!(
+            dump.validate(dump.stdout_counts()).is_ok(),
+            "--yaml alone is a valid output"
+        );
 
         dump.yaml = None;
         dump.yamls = true;
-        assert!(dump.validate(dump.stdout_counts()).is_ok(), "--yamls alone is a valid output");
+        assert!(
+            dump.validate(dump.stdout_counts()).is_ok(),
+            "--yamls alone is a valid output"
+        );
 
         dump.yamls = false;
         dump.yaml = Some(PathBuf::from("-"));

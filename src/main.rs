@@ -14,13 +14,7 @@ use std::{
     fs::File,
     io::{self, BufWriter, Write},
     path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::RecvTimeoutError,
-    },
-    thread,
-    time::Duration,
+    sync::Arc,
 };
 
 use bus::{Bus, BusReader};
@@ -31,7 +25,7 @@ use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
 use opts::{Commands, Generate};
 
-use crate::record::Record;
+use crate::record::{BusMsg, Record};
 
 mod file_parser;
 mod flags;
@@ -61,11 +55,11 @@ fn main() -> Result<()> {
 /// * `writer` - CSV writer to output data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, flush_all: bool)
+fn csv_write<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, flush_all: bool)
 where
     I: Write,
 {
-    for rec in recv {
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writer.serialize(rec) {
             error!("Couldn't serialize csv: {err}");
         }
@@ -82,12 +76,12 @@ where
 /// * `writer` - Writer to output JSON data
 /// * `pretty` - Whether to use pretty formatting (multi-line)
 /// * `flush_all` - Whether to flush after each record
-fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, pretty: bool, flush_all: bool)
+fn json_write<I>(recv: BusReader<BusMsg>, mut writer: I, pretty: bool, flush_all: bool)
 where
     I: Write,
 {
     if pretty {
-        for rec in recv {
+        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
                 error!("Couldn't serialize json: {err}");
             }
@@ -99,7 +93,7 @@ where
             }
         }
     } else {
-        for rec in recv {
+        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
                 error!("Couldn't serialize json: {err}");
             }
@@ -120,11 +114,11 @@ where
 /// * `writer` - Writer to output YAML data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, _: bool, flush_all: bool)
+fn yaml_write<I>(recv: BusReader<BusMsg>, mut writer: I, _: bool, flush_all: bool)
 where
     I: Write,
 {
-    for rec in recv {
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writeln!(writer, "---") {
             error!("Couldn't write yaml separator: {err}");
         }
@@ -147,17 +141,13 @@ where
 /// * `writer` - CSV writer for unique path output
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `include_timestamps` - Whether to include timestamps in CSV output
-fn write_uniqs<I>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: Writer<I>,
-    _: bool,
-    include_timestamps: bool,
-) where
+fn write_uniqs<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, include_timestamps: bool)
+where
     I: Write,
 {
     let mut u = BTreeMap::new();
 
-    for rec in recv {
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         u.entry(rec.path.clone())
             .or_insert_with(uniques::UniqueCounts::default)
             .update(rec.flag, rec.file_timestamp);
@@ -290,7 +280,7 @@ macro_rules! fdump {
 }
 
 macro_rules! idump {
-    ( $want: ident, $bus: ident, $fscope: ident, $running: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
+    ( $want: ident, $bus: ident, $fscope: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
         if $want {
             let mut out_path = $f.clone();
             out_path.as_mut_os_string().push(format!(".{}", $ftype));
@@ -302,24 +292,16 @@ macro_rules! idump {
                     out_path.display()
                 ),
                 Ok(w) => {
-                    let mut recv = $bus.add_rx();
-                    let running = $running.clone();
+                    let recv = $bus.add_rx();
 
                     $fscope.spawn(move |_| {
                         let out = &mut $make_out(BufWriter::new(w));
 
-                        'RUNNING: loop {
-                            match recv.recv_timeout(Duration::from_millis(50)) {
-                                Ok(r) => $ifun(r, out),
-                                Err(e) => match e {
-                                    RecvTimeoutError::Timeout => {
-                                        if !running.load(Ordering::Acquire) {
-                                            break 'RUNNING;
-                                        }
-                                        thread::yield_now();
-                                    }
-                                    _ => return,
-                                },
+                        // Stop as soon as the parser signals the end of this file
+                        for msg in recv {
+                            match msg {
+                                BusMsg::Record(r) => $ifun(r, out),
+                                BusMsg::EndOfFile => break,
                             }
                         }
                     });
@@ -330,7 +312,7 @@ macro_rules! idump {
 }
 
 #[inline]
-fn new_bus() -> Bus<Arc<Record>> {
+fn new_bus() -> Bus<BusMsg> {
     Bus::new(4096)
 }
 
@@ -445,48 +427,27 @@ fn dump(opts: opts::Dump) -> Result<()> {
         fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);
 
         for f in file_paths {
-            let running = Arc::new(AtomicBool::new(true));
-
             crossbeam::scope(|fscope| {
                 idump!(
                     individual_csvs,
                     bus,
                     fscope,
-                    running,
                     "csv",
                     f,
                     Writer::from_writer,
                     icsv,
                 );
 
-                idump!(
-                    individual_jsons,
-                    bus,
-                    fscope,
-                    running,
-                    "json",
-                    f,
-                    identity,
-                    ijson,
-                );
-
-                idump!(
-                    individual_yamls,
-                    bus,
-                    fscope,
-                    running,
-                    "yaml",
-                    f,
-                    identity,
-                    iyaml,
-                );
+                idump!(individual_jsons, bus, fscope, "json", f, identity, ijson,);
+                idump!(individual_yamls, bus, fscope, "yaml", f, identity, iyaml,);
 
                 match file_parser::parse_file(&f, &mut bus, &rec_filter) {
                     Ok(_) => info!("Finished parsing {}", f.display()),
                     Err(e) => error!("Couldn't parse '{}': {}", f.display(), e),
                 };
 
-                running.store(false, Ordering::Release);
+                // Lets the per-file writers above finish without waiting on a timeout
+                bus.broadcast(BusMsg::EndOfFile);
             })
             .expect("Couldn't close all the threads");
         }
@@ -506,7 +467,7 @@ fn generate(g: Generate) -> Result<()> {
 
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
-    use std::mem;
+    use std::{mem, time::Duration};
 
     use notify_debouncer_full::{
         DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
