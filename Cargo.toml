@@ -34,7 +34,6 @@ byteorder = "1"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 color-eyre = { version = "0", default-features = false }
-crossbeam = "0"
 crossbeam-channel = "0"
 csv = "1"
 env_logger = "0"

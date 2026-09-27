@@ -18,6 +18,7 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
+    thread,
 };
 
 use bus::{Bus, BusReader};
@@ -265,7 +266,7 @@ macro_rules! fdump {
             let recv = $bus.add_rx();
 
             if path_stdout(&p) {
-                $scope.spawn(move |_| {
+                $scope.spawn(move || {
                     $proc_f(recv, $creater($c_opt.make_stdout()), false, false);
                 });
             } else {
@@ -276,7 +277,7 @@ macro_rules! fdump {
                         p.display()
                     ),
                     Ok(f) => {
-                        $scope.spawn(move |_| {
+                        $scope.spawn(move || {
                             if $c_opt.is_gz(&p) {
                                 $proc_f(
                                     recv,
@@ -318,7 +319,7 @@ macro_rules! idump {
                 Ok(w) => {
                     let recv = $bus.add_rx();
 
-                    $fscope.spawn(move |_| {
+                    $fscope.spawn(move || {
                         let out = &mut $make_out(BufWriter::new(w));
 
                         // Stop as soon as the parser signals the end of this file
@@ -384,7 +385,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
     let copts = opts.compress_opts;
 
-    crossbeam::scope(|scope| {
+    thread::scope(|scope| {
         let mut bus = new_bus();
 
         fdump!(
@@ -402,7 +403,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
             let recv = bus.add_rx();
 
             if path_stdout(&p) {
-                scope.spawn(move |_| {
+                scope.spawn(move || {
                     write_uniqs(
                         recv,
                         csv::Writer::from_writer(copts.make_stdout()),
@@ -417,7 +418,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                         p.display()
                     ),
                     Ok(f) => {
-                        scope.spawn(move |_| {
+                        scope.spawn(move || {
                             if copts.is_gz(&p) {
                                 write_uniqs(
                                     recv,
@@ -456,7 +457,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);
 
         for f in file_paths {
-            crossbeam::scope(|fscope| {
+            thread::scope(|fscope| {
                 idump!(
                     individual_csvs,
                     bus,
@@ -477,11 +478,9 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
                 // Lets the per-file writers above finish without waiting on a timeout
                 bus.broadcast(BusMsg::EndOfFile);
-            })
-            .expect("Couldn't close all the threads");
+            });
         }
-    })
-    .expect("Couldn't close all the threads");
+    });
 
     finish("dumping")
 }
@@ -585,11 +584,11 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     let copts = opts.compress_opts;
 
-    crossbeam::scope(|fscope| {
+    thread::scope(|fscope| {
         let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
-        fscope.spawn(move |_| {
+        fscope.spawn(move || {
             let out = copts.make_stdout();
 
             match opts.format {
@@ -606,8 +605,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
                 fail!("Error parsing {}: {err}", path.display());
             }
         }
-    })
-    .unwrap();
+    });
 
     finish("watching")
 }
