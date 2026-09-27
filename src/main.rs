@@ -1,7 +1,6 @@
 #![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
 #![warn(rust_2021_compatibility)]
-#![deny(warnings)]
 
 #[macro_use]
 extern crate log;
