@@ -75,6 +75,8 @@ fn main() -> Result<()> {
 
 /// Writes records to CSV format from a bus receiver
 ///
+/// Stops at the first write error, since nothing later can succeed either.
+///
 /// # Arguments
 /// * `recv` - Bus reader receiving record updates
 /// * `writer` - CSV writer to output data
@@ -87,9 +89,11 @@ where
     for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writer.serialize(rec) {
             fail!("Couldn't serialize csv: {err}");
+            return;
         }
         if flush_all && let Err(err) = writer.flush() {
             fail!("Couldn't flush csv: {err}");
+            return;
         }
     }
 }
@@ -109,24 +113,30 @@ where
         for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
                 fail!("Couldn't serialize json: {err}");
+                return;
             }
             if let Err(err) = writeln!(writer) {
                 fail!("Couldn't append json newline: {err}");
+                return;
             }
             if flush_all && let Err(err) = writer.flush() {
                 fail!("Couldn't flush json: {err}");
+                return;
             }
         }
     } else {
         for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
                 fail!("Couldn't serialize json: {err}");
+                return;
             }
             if let Err(err) = writeln!(writer) {
                 fail!("Couldn't append json newline: {err}");
+                return;
             }
             if flush_all && let Err(err) = writer.flush() {
                 fail!("Couldn't flush json: {err}");
+                return;
             }
         }
     }
@@ -146,15 +156,19 @@ where
     for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writeln!(writer, "---") {
             fail!("Couldn't write yaml separator: {err}");
+            return;
         }
         if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
             fail!("Couldn't serialize yaml: {err}");
+            return;
         }
         if let Err(err) = writeln!(writer) {
             fail!("Couldn't append yaml newline: {err}");
+            return;
         }
         if flush_all && let Err(err) = writer.flush() {
             fail!("Couldn't flush yaml: {err}");
+            return;
         }
     }
 }
