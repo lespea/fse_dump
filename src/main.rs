@@ -345,6 +345,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                 LevelFilter::Info
             },
         )
+        .parse_default_env()
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();
@@ -515,6 +516,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     env_logger::Builder::new()
         .filter(None, LevelFilter::Info)
+        .parse_default_env()
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();
