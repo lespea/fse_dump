@@ -509,9 +509,9 @@ fn generate(g: Generate) -> Result<()> {
 
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
-    use std::{mem, time::Duration};
+    use std::time::Duration;
 
-    use crossbeam_channel::RecvTimeoutError;
+    use crossbeam_channel::select;
     use notify_debouncer_full::{
         DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
     };
@@ -531,6 +531,12 @@ fn watch(opts: opts::Watch) -> Result<()> {
     let rec_filter = opts.filter_opts.filter()?;
 
     let (send, recv) = crossbeam_channel::bounded(128);
+
+    // Ctrl-C / SIGTERM stop the loop below so the output stream gets its trailer written
+    let (stop_send, stop_recv) = crossbeam_channel::bounded::<()>(1);
+    ctrlc::set_handler(move || {
+        let _ = stop_send.try_send(());
+    })?;
 
     let debounce_time = Duration::from_secs(2);
 
@@ -556,7 +562,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
             .for_each(|error| fail!("Watch error: {error:?}")),
     };
 
-    if opts.poll {
+    // Keeps whichever watcher we built alive until the loop below is done
+    let _watcher: Box<dyn std::any::Any> = if opts.poll {
         let mut debouncer = new_debouncer_opt::<_, notify::PollWatcher, FileIdMap>(
             debounce_time,
             None,
@@ -570,7 +577,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
-        mem::forget(debouncer);
+        Box::new(debouncer)
     } else {
         let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
             debounce_time,
@@ -585,7 +592,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
-        mem::forget(debouncer);
+        Box::new(debouncer)
     };
 
     let copts = opts.compress_opts;
@@ -607,20 +614,26 @@ fn watch(opts: opts::Watch) -> Result<()> {
         });
 
         loop {
-            match recv.recv_timeout(Duration::from_millis(500)) {
-                Ok(path) => {
-                    if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
-                        fail!("Error parsing {}: {err}", path.display());
+            select! {
+                recv(recv) -> msg => match msg {
+                    Ok(path) => {
+                        if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
+                            fail!("Error parsing {}: {err}", path.display());
+                        }
                     }
+                    Err(_) => break,
+                },
+                recv(stop_recv) -> _ => {
+                    info!("Interrupted; finishing the output");
+                    break;
                 }
-                Err(RecvTimeoutError::Timeout) => {
+                default(Duration::from_millis(500)) => {
                     // Nothing to write to any more; keeping the watch alive would only hide it
                     if writer.is_finished() {
                         fail!("The output writer stopped unexpectedly");
                         break;
                     }
                 }
-                Err(RecvTimeoutError::Disconnected) => break,
             }
         }
 

@@ -25,7 +25,7 @@ alt_flags = []
 extra_id = []
 
 hex = ["dep:serde-hex"]
-watch = ["dep:notify-debouncer-full"]
+watch = ["dep:notify-debouncer-full", "dep:ctrlc"]
 zstd = ["dep:zstd"]
 
 [dependencies]
@@ -35,6 +35,7 @@ clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 color-eyre = { version = "0", default-features = false }
 crossbeam-channel = "0"
+ctrlc = { version = "3", features = ["termination"], optional = true }
 csv = "1"
 env_logger = "0"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
