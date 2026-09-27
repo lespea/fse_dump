@@ -368,6 +368,7 @@ impl Dump {
 
         let mut files = Vec::with_capacity(128);
         let mut errors = 0usize;
+        let mut skipped = 0usize;
 
         self.files.iter().for_each(|path| {
             match path.metadata() {
@@ -404,6 +405,7 @@ impl Dump {
                                                                 "Skipping {} due to time cutoff",
                                                                 e.path().display()
                                                             );
+                                                            skipped += 1;
                                                             false
                                                         }
                                                     } else {
@@ -445,6 +447,13 @@ impl Dump {
                 }
             }
         });
+
+        if skipped > 0 {
+            warn!(
+                "Skipped {skipped} file(s) modified before the --days {} cutoff; pass --days 0 to include them",
+                self.pull_days
+            );
+        }
 
         if errors > 0 {
             return Err(eyre!("{errors} input path(s) could not be read"));
