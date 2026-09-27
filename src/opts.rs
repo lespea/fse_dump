@@ -340,11 +340,6 @@ impl Dump {
         Ok(())
     }
 
-    #[inline]
-    fn want_filename(str: &OsStr) -> bool {
-        str.to_string_lossy().chars().all(|c| c.is_ascii_hexdigit())
-    }
-
     fn cutoff_time(&self) -> Option<SystemTime> {
         if self.pull_days > 0 {
             Some(
@@ -387,7 +382,7 @@ impl Dump {
                                 Ok(e) => {
                                     // Do the filename check first since it's fast and doesn't do
                                     // any metadata reads
-                                    if Dump::want_filename(e.file_name()) {
+                                    if is_fsevents_log_name(e.file_name()) {
                                         let want_file = if let Ok(m) = e.metadata() {
                                             if !m.is_dir() {
                                                 // See if we care about filtering by time
@@ -461,6 +456,13 @@ impl Dump {
 
         Ok(files)
     }
+}
+
+/// fseventsd names its logs after an event id, so a log file name is hex digits and nothing else
+#[inline]
+pub fn is_fsevents_log_name(name: &OsStr) -> bool {
+    let name = name.to_string_lossy();
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn get_opts() -> Result<Cli> {
@@ -838,21 +840,21 @@ mod tests {
     }
 
     #[test]
-    fn test_dump_want_filename_hex_only() {
-        assert!(Dump::want_filename(OsStr::new("0123456789abcdef")));
-        assert!(Dump::want_filename(OsStr::new("ABCDEF")));
-        assert!(Dump::want_filename(OsStr::new("0")));
-        assert!(Dump::want_filename(OsStr::new("deadbeef")));
+    fn test_log_name_hex_only() {
+        assert!(is_fsevents_log_name(OsStr::new("0123456789abcdef")));
+        assert!(is_fsevents_log_name(OsStr::new("ABCDEF")));
+        assert!(is_fsevents_log_name(OsStr::new("0")));
+        assert!(is_fsevents_log_name(OsStr::new("deadbeef")));
     }
 
     #[test]
-    fn test_dump_want_filename_invalid() {
-        assert!(!Dump::want_filename(OsStr::new("not_hex")));
-        assert!(!Dump::want_filename(OsStr::new("file.txt")));
-        assert!(!Dump::want_filename(OsStr::new("123-456")));
-        assert!(!Dump::want_filename(OsStr::new("12g34")));
-        // Note: empty string actually returns true because .all() on empty iterator is true
-        // This is technically correct behavior - no non-hex chars in an empty string!
+    fn test_log_name_invalid() {
+        assert!(!is_fsevents_log_name(OsStr::new("not_hex")));
+        assert!(!is_fsevents_log_name(OsStr::new("file.txt")));
+        assert!(!is_fsevents_log_name(OsStr::new("123-456")));
+        assert!(!is_fsevents_log_name(OsStr::new("12g34")));
+        assert!(!is_fsevents_log_name(OsStr::new("fseventsd-uuid")));
+        assert!(!is_fsevents_log_name(OsStr::new("")));
     }
 
     #[test]

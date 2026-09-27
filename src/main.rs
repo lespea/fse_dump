@@ -534,27 +534,33 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     let debounce_time = Duration::from_secs(2);
 
+    // Forwards newly created fsevents logs (and only those) to the parsing loop
+    let on_events = move |result: DebounceEventResult| match result {
+        Ok(events) => events.iter().for_each(|event| {
+            if event.kind.is_create() {
+                for path in event.paths.iter() {
+                    let is_log =
+                        path.file_name().is_some_and(opts::is_fsevents_log_name) && path.is_file();
+                    if !is_log {
+                        debug!("Ignoring non-log file {}", path.display());
+                        continue;
+                    }
+                    if let Err(err) = send.send_timeout(path.clone(), Duration::from_secs(1)) {
+                        fail!("Error processing created file {}: {err}", path.display());
+                    }
+                }
+            }
+        }),
+        Err(errors) => errors
+            .iter()
+            .for_each(|error| fail!("Watch error: {error:?}")),
+    };
+
     if opts.poll {
         let mut debouncer = new_debouncer_opt::<_, notify::PollWatcher, FileIdMap>(
             debounce_time,
             None,
-            move |result: DebounceEventResult| match result {
-                Ok(events) => events.iter().for_each(|event| {
-                    if event.kind.is_create() {
-                        for path in event.paths.iter() {
-                            if path.exists()
-                                && let Err(err) =
-                                    send.send_timeout(path.clone(), Duration::from_secs(1))
-                            {
-                                fail!("Error processing created file {}: {err}", path.display());
-                            }
-                        }
-                    }
-                }),
-                Err(errors) => errors
-                    .iter()
-                    .for_each(|error| fail!("Watch error: {error:?}")),
-            },
+            on_events,
             FileIdMap::new(),
             notify::Config::default().with_poll_interval(Duration::from_secs(2)),
         )?;
@@ -569,23 +575,7 @@ fn watch(opts: opts::Watch) -> Result<()> {
         let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
             debounce_time,
             None,
-            move |result: DebounceEventResult| match result {
-                Ok(events) => events.iter().for_each(|event| {
-                    if event.kind.is_create() {
-                        for path in event.paths.iter() {
-                            if path.exists()
-                                && let Err(err) =
-                                    send.send_timeout(path.clone(), Duration::from_secs(1))
-                            {
-                                fail!("Error processing created file {}: {err}", path.display());
-                            }
-                        }
-                    }
-                }),
-                Err(errors) => errors
-                    .iter()
-                    .for_each(|error| fail!("Watch error: {error:?}")),
-            },
+            on_events,
             FileIdMap::new(),
             notify::Config::default(),
         )?;
