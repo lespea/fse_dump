@@ -183,12 +183,18 @@ fn write_uniqs<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, inclu
 where
     I: Write,
 {
-    let mut u = BTreeMap::new();
+    let mut u: BTreeMap<String, uniques::UniqueCounts> = BTreeMap::new();
 
     for rec in recv.into_iter().filter_map(BusMsg::into_record) {
-        u.entry(rec.path.clone())
-            .or_insert_with(uniques::UniqueCounts::default)
-            .update(rec.flag, rec.file_timestamp);
+        // Most paths repeat, so only pay for the key clone on the first sighting
+        match u.get_mut(&rec.path) {
+            Some(counts) => counts.update(rec.flag, rec.file_timestamp),
+            None => {
+                let mut counts = uniques::UniqueCounts::default();
+                counts.update(rec.flag, rec.file_timestamp);
+                u.insert(rec.path.clone(), counts);
+            }
+        }
     }
 
     if include_timestamps {

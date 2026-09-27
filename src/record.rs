@@ -53,7 +53,7 @@ impl BusMsg {
 }
 
 /// Custom serializer for `Option<Timestamp>` to produce ISO 8601 format
-fn serialize_optional_timestamp<S>(
+pub(crate) fn serialize_optional_timestamp<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>

@@ -9,9 +9,9 @@ use std::sync::{OnceLock, RwLock};
 
 const FLAG_SEP: &str = " | ";
 
-/// Initial string capacity for flag strings
-/// Calculated as: max_flag_name_length (23 for "ExtendedAttrModified") * max_flags (21)
-/// + separator_length (3) * (max_flags - 1) = ~540 bytes, rounded to 512 for alignment
+/// Initial string capacity for flag strings: generous enough for every flag name (the longest,
+/// "ExtendedAttrModified", is 20 bytes) plus separators without reallocating; the result is
+/// shrunk to fit before it is leaked
 const FLAG_STRING_CAPACITY: usize = 512;
 
 // These are all of the flags that are defined

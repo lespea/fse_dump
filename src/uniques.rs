@@ -5,7 +5,7 @@
 
 use jiff::Timestamp;
 
-use crate::flags as f;
+use crate::{flags as f, record::serialize_optional_timestamp};
 
 /// Aggregates counts and flags for a unique path
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -118,20 +118,6 @@ pub struct UniqueOut {
 /// Helper to determine if timestamp should be skipped during serialization
 fn should_skip_timestamp(ts: &Option<Timestamp>) -> bool {
     ts.is_none()
-}
-
-/// Custom serializer for `Option<Timestamp>` to produce ISO 8601 format
-fn serialize_optional_timestamp<S>(
-    timestamp: &Option<Timestamp>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match timestamp {
-        Some(ts) => serializer.serialize_str(&ts.to_string()),
-        None => serializer.serialize_none(),
-    }
 }
 
 #[cfg(test)]

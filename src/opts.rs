@@ -274,8 +274,10 @@ impl CompressOpts {
         #[cfg(not(feature = "zstd"))]
         let is_zstd = false;
 
+        // stdout is line buffered underneath; a large buffer here keeps json/yaml lines from
+        // turning into one write syscall each
         BufWriter::with_capacity(
-            512,
+            64 * 1024,
             if is_zstd {
                 #[cfg(feature = "zstd")]
                 {
