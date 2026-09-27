@@ -125,12 +125,15 @@ pub fn flag_map() -> &'static RwLock<HashMap<u32, FlagStrs>> {
         // We'll probably need this
         combo.insert(0, FlagStrs::default());
 
+        // The ALT_FLAGS table describes the on-disk little-endian word, while records carry the
+        // big-endian view (see `RecordParser::parse_record`), so swap before keying by it.
         #[cfg(feature = "alt_flags")]
         for (alt, num) in ALT_FLAGS.iter() {
+            let key = num.swap_bytes();
             if let Some(old) = combo.insert(
-                *num,
+                key,
                 FlagStrs {
-                    norm: base.remove(num).unwrap_or_default(),
+                    norm: base.remove(&key).unwrap_or_default(),
                     alt,
                 },
             ) {
@@ -173,9 +176,13 @@ fn bits_to_str(bits: u32) -> FlagStrs {
     #[cfg(feature = "alt_flags")]
     let mut alt = String::with_capacity(FLAG_STRING_CAPACITY);
 
+    // ALT_FLAGS is defined against the little-endian on-disk word; `bits` is the big-endian view
+    #[cfg(feature = "alt_flags")]
+    let alt_bits = bits.swap_bytes();
+
     #[cfg(feature = "alt_flags")]
     for (name, num) in ALT_FLAGS.iter() {
-        if bits & *num == *num {
+        if alt_bits & *num == *num {
             if !alt.is_empty() {
                 alt.push_str(FLAG_SEP)
             }
@@ -272,8 +279,8 @@ mod tests {
         }
         #[cfg(feature = "alt_flags")]
         for (name, flag) in ALT_FLAGS.iter() {
-            assert_eq!(bits_to_str(*flag).alt, *name);
-            assert_eq!(bits_to_str(*flag).alt, *name);
+            assert_eq!(bits_to_str(flag.swap_bytes()).alt, *name);
+            assert_eq!(bits_to_str(flag.swap_bytes()).alt, *name);
         }
     }
 
@@ -478,7 +485,7 @@ mod tests {
     #[test]
     fn test_alt_flags_parsing() {
         for (name, flag) in ALT_FLAGS.iter() {
-            let result = parse_bits(*flag);
+            let result = parse_bits(flag.swap_bytes());
             assert_eq!(
                 result.alt, *name,
                 "Alt flag '{}' should parse correctly",
@@ -490,10 +497,30 @@ mod tests {
     #[cfg(feature = "alt_flags")]
     #[test]
     fn test_alt_flags_multiple() {
-        let bits = ALT_FLAGS[0].1 | ALT_FLAGS[1].1;
+        let bits = (ALT_FLAGS[0].1 | ALT_FLAGS[1].1).swap_bytes();
         let result = parse_bits(bits);
 
         assert!(result.alt.contains(ALT_FLAGS[0].0));
         assert!(result.alt.contains(ALT_FLAGS[1].0));
+    }
+
+    /// Both tables describe the same on-disk bits, so the shared names must agree for a record
+    #[cfg(feature = "alt_flags")]
+    #[test]
+    fn test_alt_flags_agree_with_norm() {
+        for (name, bits) in [
+            ("Created", 0x0100_0000u32),
+            ("Removed", 0x0200_0000),
+            ("Modified", 0x1000_0000),
+            ("FileEvent", 0x0000_8000),
+            ("FolderEvent", 0x0000_0001),
+            ("Mount", 0x0000_0002),
+            ("EndOfTransaction", 0x0000_0020),
+            ("HardLink", 0x0000_1000),
+        ] {
+            let result = parse_bits(bits);
+            assert_eq!(result.norm, name);
+            assert_eq!(result.alt, name, "alt name for {name} ({bits:#010x})");
+        }
     }
 }
