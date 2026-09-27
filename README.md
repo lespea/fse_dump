@@ -360,10 +360,10 @@ Each FSEvents record contains the following fields:
 ```json
 {
   "path": "/Users/alice/Documents/file.txt",
-  "event_id": "0x12ab34cd",
+  "event_id": "0x12AB34CD",
   "flags": "FileEvent | Modified",
-  "node_id": "0x56ef78",
-  "extra_id": "0x9abc",
+  "node_id": "0x56EF78",
+  "extra_id": "0x9ABC",
   "file_timestamp": "2023-05-24T10:30:00Z"
 }
 ```

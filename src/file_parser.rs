@@ -336,6 +336,25 @@ mod tests {
     }
 
     #[test]
+    fn test_v3_event_ids_match_filename() {
+        let mut bus = Bus::new(4096);
+        let mut recv = bus.add_rx();
+
+        // fseventsd names a log after the event id that follows its last record, so every id
+        // inside `000000000342c4f2` must be below 0x342c4f2 (and, for a full log, close to it).
+        let path: PathBuf = "testfiles/v3/000000000342c4f2".into();
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("Couldn't parse test file");
+        drop(bus);
+
+        let ids: Vec<u64> = recv.iter().map(|r| r.event_id).collect();
+        let max = *ids.iter().max().unwrap();
+        let min = *ids.iter().min().unwrap();
+
+        assert!(max < 0x342c4f2, "max event id {max:#x} should be below the file name");
+        assert!(min > 0x3420000, "min event id {min:#x} should be near the file name");
+    }
+
+    #[test]
     fn test_v3_multiple_receivers() {
         let mut bus = Bus::new(4096);
         let mut recv1 = bus.add_rx();
