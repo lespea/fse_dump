@@ -316,6 +316,9 @@ impl Dump {
         if stdout_path(&self.json) {
             counts += 1
         };
+        if stdout_path(&self.yaml) {
+            counts += 1
+        };
         if stdout_path(&self.uniques) {
             counts += 1
         };
@@ -331,8 +334,10 @@ impl Dump {
 
         if !(self.csvs
             || self.jsons
+            || self.yamls
             || self.csv.is_some()
             || self.json.is_some()
+            || self.yaml.is_some()
             || self.uniques.is_some())
         {
             return Err(eyre!("You must specify at least one output type!",));
@@ -697,6 +702,49 @@ mod tests {
             dump.validate(count).is_err(),
             "Should fail with multiple stdout"
         );
+    }
+
+    #[test]
+    fn test_dump_validate_yaml_only() {
+        let mut dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: Some(PathBuf::from("out.yaml")),
+            uniques: None,
+            unique_timestamps: false,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        assert!(dump.validate(dump.stdout_counts()).is_ok(), "--yaml alone is a valid output");
+
+        dump.yaml = None;
+        dump.yamls = true;
+        assert!(dump.validate(dump.stdout_counts()).is_ok(), "--yamls alone is a valid output");
+
+        dump.yamls = false;
+        dump.yaml = Some(PathBuf::from("-"));
+        dump.json = Some(PathBuf::from("-"));
+        assert_eq!(dump.stdout_counts(), 2, "yaml on stdout must be counted");
+        assert!(dump.validate(dump.stdout_counts()).is_err());
     }
 
     #[test]
