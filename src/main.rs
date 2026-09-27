@@ -14,7 +14,10 @@ use std::{
     fs::File,
     io::{self, BufWriter, Write},
     path::Path,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use bus::{Bus, BusReader};
@@ -39,6 +42,27 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+/// Number of errors logged while running; a non-zero count makes the process exit non-zero
+static FAILURES: AtomicUsize = AtomicUsize::new(0);
+
+/// Logs an error and records it so the final exit status reflects it
+macro_rules! fail {
+    ($($arg:tt)*) => {{
+        log::error!($($arg)*);
+        FAILURES.fetch_add(1, Ordering::Relaxed);
+    }};
+}
+
+/// Turns the recorded failures into the process's final result
+fn finish(what: &str) -> Result<()> {
+    match FAILURES.load(Ordering::Relaxed) {
+        0 => Ok(()),
+        n => Err(color_eyre::eyre::eyre!(
+            "{n} error(s) occurred while {what}; see the log above"
+        )),
+    }
+}
+
 fn main() -> Result<()> {
     match opts::get_opts()?.command {
         Commands::Dump(d) => dump(d),
@@ -61,10 +85,10 @@ where
 {
     for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writer.serialize(rec) {
-            error!("Couldn't serialize csv: {err}");
+            fail!("Couldn't serialize csv: {err}");
         }
         if flush_all && let Err(err) = writer.flush() {
-            error!("Couldn't flush csv: {err}");
+            fail!("Couldn't flush csv: {err}");
         }
     }
 }
@@ -83,25 +107,25 @@ where
     if pretty {
         for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
-                error!("Couldn't serialize json: {err}");
+                fail!("Couldn't serialize json: {err}");
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append json newline: {err}");
+                fail!("Couldn't append json newline: {err}");
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush json: {err}");
+                fail!("Couldn't flush json: {err}");
             }
         }
     } else {
         for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
-                error!("Couldn't serialize json: {err}");
+                fail!("Couldn't serialize json: {err}");
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append json newline: {err}");
+                fail!("Couldn't append json newline: {err}");
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush json: {err}");
+                fail!("Couldn't flush json: {err}");
             }
         }
     }
@@ -120,16 +144,16 @@ where
 {
     for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writeln!(writer, "---") {
-            error!("Couldn't write yaml separator: {err}");
+            fail!("Couldn't write yaml separator: {err}");
         }
         if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
-            error!("Couldn't serialize yaml: {err}");
+            fail!("Couldn't serialize yaml: {err}");
         }
         if let Err(err) = writeln!(writer) {
-            error!("Couldn't append yaml newline: {err}");
+            fail!("Couldn't append yaml newline: {err}");
         }
         if flush_all && let Err(err) = writer.flush() {
-            error!("Couldn't flush yaml: {err}");
+            fail!("Couldn't flush yaml: {err}");
         }
     }
 }
@@ -157,7 +181,7 @@ where
         // Use full serialization with timestamps
         for (path, v) in u {
             if let Err(err) = writer.serialize(v.into_unique_out(path)) {
-                error!("Error writing the uniques: {err}");
+                fail!("Error writing the uniques: {err}");
             }
         }
     } else {
@@ -169,7 +193,7 @@ where
         let header = vec!["path", "counts", "flags"];
 
         if let Err(err) = writer.write_record(&header) {
-            error!("Error writing CSV header: {err}");
+            fail!("Error writing CSV header: {err}");
             return;
         }
 
@@ -188,7 +212,7 @@ where
             let record = vec![out.path.as_str(), counts_str.as_str(), out.flags];
 
             if let Err(err) = writer.write_record(&record) {
-                error!("Error writing unique record: {err}");
+                fail!("Error writing unique record: {err}");
             }
         }
     }
@@ -208,30 +232,30 @@ fn path_stdout(p: &Path) -> bool {
 #[inline]
 fn icsv(rec: Arc<Record>, writer: &mut Writer<BufWriter<File>>) {
     if let Err(err) = writer.serialize(&rec) {
-        error!("Error writing csv rec: {err}")
+        fail!("Error writing csv rec: {err}")
     }
 }
 
 #[inline]
 fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = serde_json::to_writer(&mut *writer, &rec) {
-        error!("Error writing json rec: {err}")
+        fail!("Error writing json rec: {err}")
     }
     if let Err(err) = writeln!(writer) {
-        error!("Error writing json newline: {err}")
+        fail!("Error writing json newline: {err}")
     }
 }
 
 #[inline]
 fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = writeln!(writer, "---") {
-        error!("Error writing yaml separator: {err}")
+        fail!("Error writing yaml separator: {err}")
     }
     if let Err(err) = serde_yaml::to_writer(&mut *writer, &rec) {
-        error!("Error writing yaml rec: {err}")
+        fail!("Error writing yaml rec: {err}")
     }
     if let Err(err) = writeln!(writer) {
-        error!("Error writing yaml newline: {err}")
+        fail!("Error writing yaml newline: {err}")
     }
 }
 
@@ -246,7 +270,7 @@ macro_rules! fdump {
                 });
             } else {
                 match File::create(&p) {
-                    Err(err) => error!(
+                    Err(err) => fail!(
                         "Couldn't create {} output file {}: {err}",
                         $ftype,
                         p.display()
@@ -286,7 +310,7 @@ macro_rules! idump {
             out_path.as_mut_os_string().push(format!(".{}", $ftype));
 
             match File::create(&out_path) {
-                Err(err) => error!(
+                Err(err) => fail!(
                     "Couldn't open a {} writer at {}: {err}",
                     $ftype,
                     out_path.display()
@@ -335,7 +359,12 @@ fn dump(opts: opts::Dump) -> Result<()> {
     color_eyre::install()?;
 
     opts.validate(std_counts)?;
-    let file_paths = opts.real_files();
+    let file_paths = opts.real_files()?;
+    if file_paths.is_empty() {
+        return Err(color_eyre::eyre::eyre!(
+            "No fsevents files found to parse (check the paths and the --days cutoff)"
+        ));
+    }
 
     info!("Starting");
 
@@ -383,7 +412,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                 });
             } else {
                 match File::create(&p) {
-                    Err(err) => error!(
+                    Err(err) => fail!(
                         "Couldn't create unique csv output file {}: {err}",
                         p.display()
                     ),
@@ -443,7 +472,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
                 match file_parser::parse_file(&f, &mut bus, &rec_filter) {
                     Ok(_) => info!("Finished parsing {}", f.display()),
-                    Err(e) => error!("Couldn't parse '{}': {}", f.display(), e),
+                    Err(e) => fail!("Couldn't parse '{}': {}", f.display(), e),
                 };
 
                 // Lets the per-file writers above finish without waiting on a timeout
@@ -454,7 +483,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
     })
     .expect("Couldn't close all the threads");
 
-    Ok(())
+    finish("dumping")
 }
 
 fn generate(g: Generate) -> Result<()> {
@@ -502,14 +531,14 @@ fn watch(opts: opts::Watch) -> Result<()> {
                                 && let Err(err) =
                                     send.send_timeout(path.clone(), Duration::from_secs(1))
                             {
-                                error!("Error processing created file {}: {err}", path.display());
+                                fail!("Error processing created file {}: {err}", path.display());
                             }
                         }
                     }
                 }),
                 Err(errors) => errors
                     .iter()
-                    .for_each(|error| error!("Watch error: {error:?}")),
+                    .for_each(|error| fail!("Watch error: {error:?}")),
             },
             FileIdMap::new(),
             notify::Config::default().with_poll_interval(Duration::from_secs(2)),
@@ -533,14 +562,14 @@ fn watch(opts: opts::Watch) -> Result<()> {
                                 && let Err(err) =
                                     send.send_timeout(path.clone(), Duration::from_secs(1))
                             {
-                                error!("Error processing created file {}: {err}", path.display());
+                                fail!("Error processing created file {}: {err}", path.display());
                             }
                         }
                     }
                 }),
                 Err(errors) => errors
                     .iter()
-                    .for_each(|error| error!("Watch error: {error:?}")),
+                    .for_each(|error| fail!("Watch error: {error:?}")),
             },
             FileIdMap::new(),
             notify::Config::default(),
@@ -574,11 +603,11 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
         for path in recv {
             if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
-                error!("Error parsing {}: {err}", path.display());
+                fail!("Error parsing {}: {err}", path.display());
             }
         }
     })
     .unwrap();
 
-    Ok(())
+    finish("watching")
 }
