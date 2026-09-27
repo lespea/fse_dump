@@ -21,6 +21,8 @@ pub struct Cli {
     pub command: Commands,
 }
 
+// Dump dwarfs Generate, but the value is parsed once and matched once, so boxing buys nothing
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Dump fsevents file into the wanted output files/format

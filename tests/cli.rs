@@ -56,8 +56,14 @@ fn event_ids_sit_below_the_file_name() {
         .iter()
         .map(|line| {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
-            let id = v["event_id"].as_str().expect("hex string event id");
-            u64::from_str_radix(id.trim_start_matches("0x"), 16).unwrap()
+            // A hex string with the `hex` feature, a plain number without it
+            match &v["event_id"] {
+                serde_json::Value::String(id) => {
+                    u64::from_str_radix(id.trim_start_matches("0x"), 16).unwrap()
+                }
+                serde_json::Value::Number(n) => n.as_u64().unwrap(),
+                other => panic!("unexpected event_id {other:?}"),
+            }
         })
         .collect();
 
@@ -168,7 +174,14 @@ fn per_file_outputs_land_next_to_the_input() {
         FIXTURE_RECORDS + 1,
         "csv has a header row"
     );
-    assert!(csv.starts_with("path,event_id,flags,node_id"));
+    let header = csv.lines().next().unwrap();
+    assert!(header.starts_with("path,event_id,flags,"), "{header}");
+    assert_eq!(
+        header.contains(",alt_flags,"),
+        cfg!(feature = "alt_flags"),
+        "{header}"
+    );
+    assert!(header.contains(",node_id,"), "{header}");
 
     let json = fs::read_to_string(dir.join("000000000342c4f2.json")).unwrap();
     assert_eq!(json.lines().count(), FIXTURE_RECORDS);
@@ -200,14 +213,19 @@ fn uniques_aggregate_by_path() {
     let out = fse_dump(&["dump", "--uniques", "-", FIXTURE]);
     assert!(out.status.success(), "{}", stderr(&out));
     let lines = stdout_lines(&out);
-    assert_eq!(lines[0], "path,counts,flags");
+    let alt = if cfg!(feature = "alt_flags") {
+        ",alt_flags"
+    } else {
+        ""
+    };
+    assert_eq!(lines[0], format!("path,counts,flags{alt}"));
     assert!(lines.len() > 1 && lines.len() <= FIXTURE_RECORDS + 1);
 
     let out = fse_dump(&["dump", "--uniques", "-", "--unique-timestamps", FIXTURE]);
     assert!(out.status.success(), "{}", stderr(&out));
     assert_eq!(
         stdout_lines(&out)[0],
-        "path,counts,flags,earliest_timestamp,latest_timestamp"
+        format!("path,counts,flags{alt},earliest_timestamp,latest_timestamp")
     );
 }
 
