@@ -50,7 +50,7 @@ serde = { version = "1", features = ["rc"] }
 serde-hex = { version = "0", optional = true }
 serde_derive = "1"
 serde_json = "1"
-serde_yaml = "0"
+serde_yaml_ng = "0"
 walkdir = "2"
 zstd = { version = "0", features = ["zstdmt"], optional = true }
 

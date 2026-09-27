@@ -157,7 +157,7 @@ where
             fail!("Couldn't write yaml separator: {err}");
             return;
         }
-        if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
+        if let Err(err) = serde_yaml_ng::to_writer(&mut writer, &rec) {
             fail!("Couldn't serialize yaml: {err}");
             return;
         }
@@ -265,7 +265,7 @@ fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = writeln!(writer, "---") {
         fail!("Error writing yaml separator: {err}")
     }
-    if let Err(err) = serde_yaml::to_writer(&mut *writer, &rec) {
+    if let Err(err) = serde_yaml_ng::to_writer(&mut *writer, &rec) {
         fail!("Error writing yaml rec: {err}")
     }
     if let Err(err) = writeln!(writer) {
