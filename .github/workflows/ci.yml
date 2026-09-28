@@ -11,7 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
+      # Stable, so a new nightly lint cannot fail CI for unrelated pushes
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
@@ -19,6 +20,26 @@ jobs:
         name: clippy
       - run: cargo fmt --all -- --check
         name: fmt
+
+  features:
+    name: Feature combinations
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "zstd", "watch", "hex", "alt_flags", "extra_id"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: features
+      - run: cargo clippy --all-targets --no-default-features --features "${{ matrix.features }}" -- -D warnings
+        name: clippy
+      - run: cargo test --no-default-features --features "${{ matrix.features }}"
+        name: test
 
   test-stable:
     name: Test Stable

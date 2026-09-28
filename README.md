@@ -37,17 +37,16 @@ cd fse_dump
 cargo build --release
 ```
 
-### With optional features
+### Features
+
+`zstd`, `watch`, `hex`, and `extra_id` are enabled by default; `alt_flags` is opt-in.
 
 ```bash
-# Build with zstd compression support
-cargo install fse_dump --features zstd
-
-# Build with watch mode (requires notify)
-cargo install fse_dump --features watch
-
-# Build with all features
+# Everything (adds alt_flags)
 cargo install fse_dump --all-features
+
+# A smaller build without watch mode or zstd
+cargo install fse_dump --no-default-features --features hex,extra_id
 ```
 
 ## Quick Start
@@ -69,7 +68,7 @@ fse_dump dump --json output.json /path/to/fsevent/file1 /path/to/file2
 
 ```bash
 # Filter by path (regex)
-fse_dump dump --json output.json -p ".*\.pdf$"
+fse_dump dump --json output.json -p "\.pdf$"
 
 # Filter by any of the specified flags
 fse_dump dump --json output.json -f Created Modified
@@ -77,9 +76,9 @@ fse_dump dump --json output.json -f Created Modified
 # Filter requiring all specified flags
 fse_dump dump --json output.json --all-flags FileEvent Modified
 
-# Combine filters
+# Combine filters (paths are relative to the volume root, so no leading slash)
 fse_dump dump --json output.json \
-  -p "/Users/.*" \
+  -p "^Users/" \
   -f Created Removed
 ```
 
@@ -172,6 +171,9 @@ fse_dump dump --json output.json.zst
 - `-d, --days <N>` - Only process files modified in the last N days (default: 90)
   - Set to 0 to process all files regardless of age
   - Based on file modification/creation time
+  - Applies to files found by scanning a directory; files named explicitly are always parsed
+  - A warning reports how many files were skipped, and the run fails if nothing is left to parse
+    (common when parsing files extracted from an image long after they were written)
 
 #### Event Filtering
 
@@ -181,12 +183,16 @@ Filter which events are included in the output:
 
 - `-p, --path-filter <REGEX>` - Only include events matching the regex pattern
 
+Paths in FSEvents logs are stored relative to the volume root, so a file at
+`/Users/alice/notes.txt` appears as `Users/alice/notes.txt`. Anchor patterns with `^Users/`,
+not `^/Users/`.
+
 ```bash
 # Only PDF files
 fse_dump dump --json output.json -p "\.pdf$"
 
-# Only files in /Users directory
-fse_dump dump --json output.json --path-filter "^/Users/"
+# Only files under the Users directory
+fse_dump dump --json output.json --path-filter "^Users/"
 
 # Multiple patterns (use regex alternation)
 fse_dump dump --json output.json -p "\.(pdf|docx?|xlsx?)$"
@@ -243,7 +249,7 @@ fse_dump dump --json output.json \
 
 # Find permission changes on system files
 fse_dump dump --json output.json \
-  -p "^/(System|Library)/" \
+  -p "^(System|Library)/" \
   -f PermissionChange
 ```
 
@@ -261,7 +267,7 @@ fse_dump dump --uniques unique_paths.csv
 
 # Parse specific file to stdout with filters
 fse_dump dump --json - \
-  -p "/Users/alice/" \
+  -p "^Users/alice/" \
   -f Modified Created \
   /path/to/fsevent/file
 
@@ -318,9 +324,12 @@ fse_dump watch \
 # Watch custom directory with CSV output
 fse_dump watch -o csv /custom/fsevents/path
 
-# Watch with compression (pipe to file)
+# Watch with compression (pipe to file); Ctrl-C or SIGTERM finishes the stream cleanly
 fse_dump watch --gzip > events.json.gz
 ```
+
+Only files whose names are made of hex digits (how fseventsd names its logs) are parsed;
+`fseventsd-uuid` and anything else in the directory is ignored.
 
 ### Generate Command
 
@@ -359,21 +368,25 @@ Each FSEvents record contains the following fields:
 
 ```json
 {
-  "path": "/Users/alice/Documents/file.txt",
-  "event_id": "0x12ab34cd",
+  "path": "Users/alice/Documents/file.txt",
+  "event_id": "0x12AB34CD",
   "flags": "FileEvent | Modified",
-  "node_id": "0x56ef78",
-  "extra_id": "0x9abc",
+  "node_id": "0x56EF78",
+  "extra_id": "0x9ABC",
   "file_timestamp": "2023-05-24T10:30:00Z"
 }
 ```
 
 - `path` - Full path to the file/folder
-- `event_id` - Unique event identifier (hex format if built with `hex` feature)
+- `event_id` - Unique event identifier (hex format if built with `hex` feature). fseventsd names
+  each log after the event id that follows its last record, so every id in a file is below the
+  file name.
 - `flags` - Human-readable flag names separated by `|`
 - `alt_flags` - Alternative flag interpretation (if built with `alt_flags` feature)
 - `node_id` - Inode number (v2 and v3 only, hex format if built with `hex` feature)
-- `extra_id` - Additional ID (v3 only, requires `extra_id` feature)
+- `extra_id` - Additional ID (v3 only, requires `extra_id` feature). Other parsers label this
+  field a UID, but in captured data it is 0 for most records and otherwise matches the numeric
+  component of `.docid/…/changed/N/` paths, so treat the meaning as unconfirmed.
 - `file_timestamp` - Modification time of the source FSEvents file (ISO 8601)
 
 ### Unique Output Format
@@ -382,8 +395,8 @@ The `--uniques` option produces aggregated records (CSV format):
 
 ```csv
 path,counts,flags,earliest_timestamp,latest_timestamp
-/Users/alice/file.txt,5,"FileEvent | Modified | Created",2023-05-24T10:30:00Z,2023-05-24T11:45:00Z
-/Users/alice/Documents,3,"FolderEvent | Modified",2023-05-24T09:15:00Z,2023-05-24T10:00:00Z
+Users/alice/file.txt,5,"FileEvent | Modified | Created",2023-05-24T10:30:00Z,2023-05-24T11:45:00Z
+Users/alice/Documents,3,"FolderEvent | Modified",2023-05-24T09:15:00Z,2023-05-24T10:00:00Z
 ```
 
 - `path` - The file/folder path
@@ -399,14 +412,21 @@ When exporting to YAML, **fse_dump** produces a multi-document stream, where eac
 
 ```yaml
 ---
-path: /Users/alice/file.txt
-event_id: 0x123
+path: Users/alice/file.txt
+event_id: "0x123"
 flags: Created
 ---
-path: /Users/alice/file.txt
-event_id: 0x124
+path: Users/alice/file.txt
+event_id: "0x124"
 flags: Modified
 ```
+
+## Exit Status
+
+`fse_dump` exits non-zero if anything went wrong: an input that could not be read or parsed, an
+output file that could not be created, a write failure, invalid options, or an input list that
+expanded to no files. Errors are logged to stderr as they happen; the final message states how
+many occurred.
 
 ## Advanced Usage
 
@@ -416,7 +436,7 @@ flags: Modified
 
 ```bash
 fse_dump dump --json deletions.json \
-  -p "^/Users/" \
+  -p "^Users/" \
   -f Removed
 ```
 
@@ -431,7 +451,7 @@ fse_dump dump --json renames.json \
 
 ```bash
 fse_dump dump --json system_changes.json \
-  -p "^/(System|Library|etc)/" \
+  -p "^(System|Library|private/etc)/" \
   -f Modified PermissionChange
 ```
 
@@ -451,7 +471,7 @@ fse_dump dump --json clones.json \
 fse_dump dump --json - | jq -r '.path'
 
 # Find events for a specific user
-fse_dump dump --json - | jq 'select(.path | startswith("/Users/alice"))'
+fse_dump dump --json - | jq 'select(.path | startswith("Users/alice"))'
 
 # Count events by flag
 fse_dump dump --json - | jq -r '.flags' | sort | uniq -c
@@ -511,7 +531,7 @@ fse_dump dump --json removable.json \
 ```bash
 # Monitor specific user's home directory
 fse_dump dump --json user_activity.json \
-  -p "^/Users/targetuser/" \
+  -p "^Users/targetuser/" \
   --days 30
 ```
 
@@ -519,17 +539,17 @@ fse_dump dump --json user_activity.json \
 
 ### Features
 
-Optional features can be enabled during build:
+Default features: `zstd`, `watch`, `hex`, `extra_id`. Opt-in: `alt_flags`.
 
 - `zstd` - Enable zstd compression support
-- `watch` - Enable watch mode for real-time monitoring
+- `watch` - Enable watch mode for real-time monitoring (pulls in `notify`)
 - `hex` - Output numeric IDs in hexadecimal format
-- `alt_flags` - Include alternative flag interpretations
+- `alt_flags` - Include the alternative (mac_apt style) flag names as a second column
 - `extra_id` - Include extra_id field from v3 files
 
 ```bash
-# Build with specific features
-cargo build --release --features "zstd,watch"
+# Trim the default set
+cargo build --release --no-default-features --features "hex,extra_id"
 
 # Build with all features
 cargo build --release --all-features
@@ -541,8 +561,11 @@ cargo build --release --all-features
 # Run tests
 cargo test
 
-# Run with debug logging
+# Run with debug logging (debug-level messages are compiled out of release builds)
 RUST_LOG=debug cargo run -- dump --json output.json
+
+# Check every feature combination the way CI does
+just allclippy
 
 # Check code
 cargo clippy

@@ -1,7 +1,6 @@
 #![warn(rust_2018_compatibility)]
 #![warn(rust_2018_idioms)]
 #![warn(rust_2021_compatibility)]
-#![deny(warnings)]
 
 #[macro_use]
 extern crate log;
@@ -16,11 +15,9 @@ use std::{
     path::Path,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::RecvTimeoutError,
+        atomic::{AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
 };
 
 use bus::{Bus, BusReader};
@@ -31,7 +28,7 @@ use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
 use opts::{Commands, Generate};
 
-use crate::record::Record;
+use crate::record::{BusMsg, Record};
 
 mod file_parser;
 mod flags;
@@ -45,6 +42,27 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+/// Number of errors logged while running; a non-zero count makes the process exit non-zero
+static FAILURES: AtomicUsize = AtomicUsize::new(0);
+
+/// Logs an error and records it so the final exit status reflects it
+macro_rules! fail {
+    ($($arg:tt)*) => {{
+        log::error!($($arg)*);
+        FAILURES.fetch_add(1, Ordering::Relaxed);
+    }};
+}
+
+/// Turns the recorded failures into the process's final result
+fn finish(what: &str) -> Result<()> {
+    match FAILURES.load(Ordering::Relaxed) {
+        0 => Ok(()),
+        n => Err(color_eyre::eyre::eyre!(
+            "{n} error(s) occurred while {what}; see the log above"
+        )),
+    }
+}
+
 fn main() -> Result<()> {
     match opts::get_opts()?.command {
         Commands::Dump(d) => dump(d),
@@ -56,21 +74,25 @@ fn main() -> Result<()> {
 
 /// Writes records to CSV format from a bus receiver
 ///
+/// Stops at the first write error, since nothing later can succeed either.
+///
 /// # Arguments
 /// * `recv` - Bus reader receiving record updates
 /// * `writer` - CSV writer to output data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn csv_write<I>(recv: BusReader<Arc<Record>>, mut writer: Writer<I>, _: bool, flush_all: bool)
+fn csv_write<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, flush_all: bool)
 where
     I: Write,
 {
-    for rec in recv {
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writer.serialize(rec) {
-            error!("Couldn't serialize csv: {err}");
+            fail!("Couldn't serialize csv: {err}");
+            return;
         }
         if flush_all && let Err(err) = writer.flush() {
-            error!("Couldn't flush csv: {err}");
+            fail!("Couldn't flush csv: {err}");
+            return;
         }
     }
 }
@@ -82,32 +104,38 @@ where
 /// * `writer` - Writer to output JSON data
 /// * `pretty` - Whether to use pretty formatting (multi-line)
 /// * `flush_all` - Whether to flush after each record
-fn json_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, pretty: bool, flush_all: bool)
+fn json_write<I>(recv: BusReader<BusMsg>, mut writer: I, pretty: bool, flush_all: bool)
 where
     I: Write,
 {
     if pretty {
-        for rec in recv {
+        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
-                error!("Couldn't serialize json: {err}");
+                fail!("Couldn't serialize json: {err}");
+                return;
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append json newline: {err}");
+                fail!("Couldn't append json newline: {err}");
+                return;
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush json: {err}");
+                fail!("Couldn't flush json: {err}");
+                return;
             }
         }
     } else {
-        for rec in recv {
+        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
             if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
-                error!("Couldn't serialize json: {err}");
+                fail!("Couldn't serialize json: {err}");
+                return;
             }
             if let Err(err) = writeln!(writer) {
-                error!("Couldn't append json newline: {err}");
+                fail!("Couldn't append json newline: {err}");
+                return;
             }
             if flush_all && let Err(err) = writer.flush() {
-                error!("Couldn't flush json: {err}");
+                fail!("Couldn't flush json: {err}");
+                return;
             }
         }
     }
@@ -120,22 +148,26 @@ where
 /// * `writer` - Writer to output YAML data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn yaml_write<I>(recv: BusReader<Arc<Record>>, mut writer: I, _: bool, flush_all: bool)
+fn yaml_write<I>(recv: BusReader<BusMsg>, mut writer: I, _: bool, flush_all: bool)
 where
     I: Write,
 {
-    for rec in recv {
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
         if let Err(err) = writeln!(writer, "---") {
-            error!("Couldn't write yaml separator: {err}");
+            fail!("Couldn't write yaml separator: {err}");
+            return;
         }
-        if let Err(err) = serde_yaml::to_writer(&mut writer, &rec) {
-            error!("Couldn't serialize yaml: {err}");
+        if let Err(err) = serde_yaml_ng::to_writer(&mut writer, &rec) {
+            fail!("Couldn't serialize yaml: {err}");
+            return;
         }
         if let Err(err) = writeln!(writer) {
-            error!("Couldn't append yaml newline: {err}");
+            fail!("Couldn't append yaml newline: {err}");
+            return;
         }
         if flush_all && let Err(err) = writer.flush() {
-            error!("Couldn't flush yaml: {err}");
+            fail!("Couldn't flush yaml: {err}");
+            return;
         }
     }
 }
@@ -147,27 +179,29 @@ where
 /// * `writer` - CSV writer for unique path output
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `include_timestamps` - Whether to include timestamps in CSV output
-fn write_uniqs<I>(
-    recv: BusReader<Arc<Record>>,
-    mut writer: Writer<I>,
-    _: bool,
-    include_timestamps: bool,
-) where
+fn write_uniqs<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, include_timestamps: bool)
+where
     I: Write,
 {
-    let mut u = BTreeMap::new();
+    let mut u: BTreeMap<String, uniques::UniqueCounts> = BTreeMap::new();
 
-    for rec in recv {
-        u.entry(rec.path.clone())
-            .or_insert_with(uniques::UniqueCounts::default)
-            .update(rec.flag, rec.file_timestamp);
+    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
+        // Most paths repeat, so only pay for the key clone on the first sighting
+        match u.get_mut(&rec.path) {
+            Some(counts) => counts.update(rec.flag, rec.file_timestamp),
+            None => {
+                let mut counts = uniques::UniqueCounts::default();
+                counts.update(rec.flag, rec.file_timestamp);
+                u.insert(rec.path.clone(), counts);
+            }
+        }
     }
 
     if include_timestamps {
         // Use full serialization with timestamps
         for (path, v) in u {
             if let Err(err) = writer.serialize(v.into_unique_out(path)) {
-                error!("Error writing the uniques: {err}");
+                fail!("Error writing the uniques: {err}");
             }
         }
     } else {
@@ -179,7 +213,7 @@ fn write_uniqs<I>(
         let header = vec!["path", "counts", "flags"];
 
         if let Err(err) = writer.write_record(&header) {
-            error!("Error writing CSV header: {err}");
+            fail!("Error writing CSV header: {err}");
             return;
         }
 
@@ -198,7 +232,7 @@ fn write_uniqs<I>(
             let record = vec![out.path.as_str(), counts_str.as_str(), out.flags];
 
             if let Err(err) = writer.write_record(&record) {
-                error!("Error writing unique record: {err}");
+                fail!("Error writing unique record: {err}");
             }
         }
     }
@@ -218,30 +252,30 @@ fn path_stdout(p: &Path) -> bool {
 #[inline]
 fn icsv(rec: Arc<Record>, writer: &mut Writer<BufWriter<File>>) {
     if let Err(err) = writer.serialize(&rec) {
-        error!("Error writing csv rec: {err}")
+        fail!("Error writing csv rec: {err}")
     }
 }
 
 #[inline]
 fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = serde_json::to_writer(&mut *writer, &rec) {
-        error!("Error writing json rec: {err}")
+        fail!("Error writing json rec: {err}")
     }
     if let Err(err) = writeln!(writer) {
-        error!("Error writing json newline: {err}")
+        fail!("Error writing json newline: {err}")
     }
 }
 
 #[inline]
 fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
     if let Err(err) = writeln!(writer, "---") {
-        error!("Error writing yaml separator: {err}")
+        fail!("Error writing yaml separator: {err}")
     }
-    if let Err(err) = serde_yaml::to_writer(&mut *writer, &rec) {
-        error!("Error writing yaml rec: {err}")
+    if let Err(err) = serde_yaml_ng::to_writer(&mut *writer, &rec) {
+        fail!("Error writing yaml rec: {err}")
     }
     if let Err(err) = writeln!(writer) {
-        error!("Error writing yaml newline: {err}")
+        fail!("Error writing yaml newline: {err}")
     }
 }
 
@@ -251,18 +285,18 @@ macro_rules! fdump {
             let recv = $bus.add_rx();
 
             if path_stdout(&p) {
-                $scope.spawn(move |_| {
+                $scope.spawn(move || {
                     $proc_f(recv, $creater($c_opt.make_stdout()), false, false);
                 });
             } else {
                 match File::create(&p) {
-                    Err(err) => error!(
+                    Err(err) => fail!(
                         "Couldn't create {} output file {}: {err}",
                         $ftype,
                         p.display()
                     ),
                     Ok(f) => {
-                        $scope.spawn(move |_| {
+                        $scope.spawn(move || {
                             if $c_opt.is_gz(&p) {
                                 $proc_f(
                                     recv,
@@ -290,36 +324,28 @@ macro_rules! fdump {
 }
 
 macro_rules! idump {
-    ( $want: ident, $bus: ident, $fscope: ident, $running: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
+    ( $want: ident, $bus: ident, $fscope: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
         if $want {
             let mut out_path = $f.clone();
             out_path.as_mut_os_string().push(format!(".{}", $ftype));
 
             match File::create(&out_path) {
-                Err(err) => error!(
+                Err(err) => fail!(
                     "Couldn't open a {} writer at {}: {err}",
                     $ftype,
                     out_path.display()
                 ),
                 Ok(w) => {
-                    let mut recv = $bus.add_rx();
-                    let running = $running.clone();
+                    let recv = $bus.add_rx();
 
-                    $fscope.spawn(move |_| {
+                    $fscope.spawn(move || {
                         let out = &mut $make_out(BufWriter::new(w));
 
-                        'RUNNING: loop {
-                            match recv.recv_timeout(Duration::from_millis(50)) {
-                                Ok(r) => $ifun(r, out),
-                                Err(e) => match e {
-                                    RecvTimeoutError::Timeout => {
-                                        if !running.load(Ordering::Acquire) {
-                                            break 'RUNNING;
-                                        }
-                                        thread::yield_now();
-                                    }
-                                    _ => return,
-                                },
+                        // Stop as soon as the parser signals the end of this file
+                        for msg in recv {
+                            match msg {
+                                BusMsg::Record(r) => $ifun(r, out),
+                                BusMsg::EndOfFile => break,
                             }
                         }
                     });
@@ -330,7 +356,7 @@ macro_rules! idump {
 }
 
 #[inline]
-fn new_bus() -> Bus<Arc<Record>> {
+fn new_bus() -> Bus<BusMsg> {
     Bus::new(4096)
 }
 
@@ -345,6 +371,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
                 LevelFilter::Info
             },
         )
+        .parse_default_env()
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();
@@ -352,7 +379,12 @@ fn dump(opts: opts::Dump) -> Result<()> {
     color_eyre::install()?;
 
     opts.validate(std_counts)?;
-    let file_paths = opts.real_files();
+    let file_paths = opts.real_files()?;
+    if file_paths.is_empty() {
+        return Err(color_eyre::eyre::eyre!(
+            "No fsevents files found to parse (check the paths and the --days cutoff)"
+        ));
+    }
 
     info!("Starting");
 
@@ -372,7 +404,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
 
     let copts = opts.compress_opts;
 
-    crossbeam::scope(|scope| {
+    thread::scope(|scope| {
         let mut bus = new_bus();
 
         fdump!(
@@ -390,7 +422,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
             let recv = bus.add_rx();
 
             if path_stdout(&p) {
-                scope.spawn(move |_| {
+                scope.spawn(move || {
                     write_uniqs(
                         recv,
                         csv::Writer::from_writer(copts.make_stdout()),
@@ -400,12 +432,12 @@ fn dump(opts: opts::Dump) -> Result<()> {
                 });
             } else {
                 match File::create(&p) {
-                    Err(err) => error!(
+                    Err(err) => fail!(
                         "Couldn't create unique csv output file {}: {err}",
                         p.display()
                     ),
                     Ok(f) => {
-                        scope.spawn(move |_| {
+                        scope.spawn(move || {
                             if copts.is_gz(&p) {
                                 write_uniqs(
                                     recv,
@@ -444,55 +476,32 @@ fn dump(opts: opts::Dump) -> Result<()> {
         fdump!(bus, scope, "yaml", yaml_path, yaml_write, copts, identity,);
 
         for f in file_paths {
-            let running = Arc::new(AtomicBool::new(true));
-
-            crossbeam::scope(|fscope| {
+            thread::scope(|fscope| {
                 idump!(
                     individual_csvs,
                     bus,
                     fscope,
-                    running,
                     "csv",
                     f,
                     Writer::from_writer,
                     icsv,
                 );
 
-                idump!(
-                    individual_jsons,
-                    bus,
-                    fscope,
-                    running,
-                    "json",
-                    f,
-                    identity,
-                    ijson,
-                );
-
-                idump!(
-                    individual_yamls,
-                    bus,
-                    fscope,
-                    running,
-                    "yaml",
-                    f,
-                    identity,
-                    iyaml,
-                );
+                idump!(individual_jsons, bus, fscope, "json", f, identity, ijson,);
+                idump!(individual_yamls, bus, fscope, "yaml", f, identity, iyaml,);
 
                 match file_parser::parse_file(&f, &mut bus, &rec_filter) {
                     Ok(_) => info!("Finished parsing {}", f.display()),
-                    Err(e) => error!("Couldn't parse '{}': {}", f.display(), e),
+                    Err(e) => fail!("Couldn't parse '{}': {}", f.display(), e),
                 };
 
-                running.store(false, Ordering::Release);
-            })
-            .expect("Couldn't close all the threads");
+                // Lets the per-file writers above finish without waiting on a timeout
+                bus.broadcast(BusMsg::EndOfFile);
+            });
         }
-    })
-    .expect("Couldn't close all the threads");
+    });
 
-    Ok(())
+    finish("dumping")
 }
 
 fn generate(g: Generate) -> Result<()> {
@@ -505,8 +514,9 @@ fn generate(g: Generate) -> Result<()> {
 
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
-    use std::mem;
+    use std::time::Duration;
 
+    use crossbeam_channel::select;
     use notify_debouncer_full::{
         DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
     };
@@ -515,39 +525,54 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     env_logger::Builder::new()
         .filter(None, LevelFilter::Info)
+        .parse_default_env()
         .write_style(WriteStyle::Always)
         .target(Target::Stderr)
         .init();
 
     color_eyre::install()?;
 
+    opts.compress_opts.validate()?;
     let rec_filter = opts.filter_opts.filter()?;
 
     let (send, recv) = crossbeam_channel::bounded(128);
 
+    // Ctrl-C / SIGTERM stop the loop below so the output stream gets its trailer written
+    let (stop_send, stop_recv) = crossbeam_channel::bounded::<()>(1);
+    ctrlc::set_handler(move || {
+        let _ = stop_send.try_send(());
+    })?;
+
     let debounce_time = Duration::from_secs(2);
 
-    if opts.poll {
+    // Forwards newly created fsevents logs (and only those) to the parsing loop
+    let on_events = move |result: DebounceEventResult| match result {
+        Ok(events) => events.iter().for_each(|event| {
+            if event.kind.is_create() {
+                for path in event.paths.iter() {
+                    let is_log =
+                        path.file_name().is_some_and(opts::is_fsevents_log_name) && path.is_file();
+                    if !is_log {
+                        debug!("Ignoring non-log file {}", path.display());
+                        continue;
+                    }
+                    if let Err(err) = send.send_timeout(path.clone(), Duration::from_secs(1)) {
+                        fail!("Error processing created file {}: {err}", path.display());
+                    }
+                }
+            }
+        }),
+        Err(errors) => errors
+            .iter()
+            .for_each(|error| fail!("Watch error: {error:?}")),
+    };
+
+    // Keeps whichever watcher we built alive until the loop below is done
+    let _watcher: Box<dyn std::any::Any> = if opts.poll {
         let mut debouncer = new_debouncer_opt::<_, notify::PollWatcher, FileIdMap>(
             debounce_time,
             None,
-            move |result: DebounceEventResult| match result {
-                Ok(events) => events.iter().for_each(|event| {
-                    if event.kind.is_create() {
-                        for path in event.paths.iter() {
-                            if path.exists()
-                                && let Err(err) =
-                                    send.send_timeout(path.clone(), Duration::from_secs(1))
-                            {
-                                error!("Error processing created file {}: {err}", path.display());
-                            }
-                        }
-                    }
-                }),
-                Err(errors) => errors
-                    .iter()
-                    .for_each(|error| error!("Watch error: {error:?}")),
-            },
+            on_events,
             FileIdMap::new(),
             notify::Config::default().with_poll_interval(Duration::from_secs(2)),
         )?;
@@ -557,28 +582,12 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
-        mem::forget(debouncer);
+        Box::new(debouncer)
     } else {
         let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
             debounce_time,
             None,
-            move |result: DebounceEventResult| match result {
-                Ok(events) => events.iter().for_each(|event| {
-                    if event.kind.is_create() {
-                        for path in event.paths.iter() {
-                            if path.exists()
-                                && let Err(err) =
-                                    send.send_timeout(path.clone(), Duration::from_secs(1))
-                            {
-                                error!("Error processing created file {}: {err}", path.display());
-                            }
-                        }
-                    }
-                }),
-                Err(errors) => errors
-                    .iter()
-                    .for_each(|error| error!("Watch error: {error:?}")),
-            },
+            on_events,
             FileIdMap::new(),
             notify::Config::default(),
         )?;
@@ -588,16 +597,16 @@ fn watch(opts: opts::Watch) -> Result<()> {
             debouncer.watch(&path, RecursiveMode::Recursive)?;
         }
 
-        mem::forget(debouncer);
+        Box::new(debouncer)
     };
 
     let copts = opts.compress_opts;
 
-    crossbeam::scope(|fscope| {
+    thread::scope(|fscope| {
         let mut bus = new_bus();
 
         let rec_recv = bus.add_rx();
-        fscope.spawn(move |_| {
+        let writer = fscope.spawn(move || {
             let out = copts.make_stdout();
 
             match opts.format {
@@ -609,13 +618,33 @@ fn watch(opts: opts::Watch) -> Result<()> {
             }
         });
 
-        for path in recv {
-            if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
-                error!("Error parsing {}: {err}", path.display());
+        loop {
+            select! {
+                recv(recv) -> msg => match msg {
+                    Ok(path) => {
+                        if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
+                            fail!("Error parsing {}: {err}", path.display());
+                        }
+                    }
+                    Err(_) => break,
+                },
+                recv(stop_recv) -> _ => {
+                    info!("Interrupted; finishing the output");
+                    break;
+                }
+                default(Duration::from_millis(500)) => {
+                    // Nothing to write to any more; keeping the watch alive would only hide it
+                    if writer.is_finished() {
+                        fail!("The output writer stopped unexpectedly");
+                        break;
+                    }
+                }
             }
         }
-    })
-    .unwrap();
 
-    Ok(())
+        // Closing the bus is what lets the writer flush and finish its stream
+        drop(bus);
+    });
+
+    finish("watching")
 }

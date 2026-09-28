@@ -4,6 +4,8 @@
 //! and the `RecordFilter` for selectively processing records based on path patterns
 //! and flag criteria.
 
+use std::sync::Arc;
+
 use color_eyre::eyre;
 use jiff::Timestamp;
 use regex::Regex;
@@ -32,8 +34,26 @@ pub struct Record {
     pub file_timestamp: Option<Timestamp>,
 }
 
+/// What flows over the record bus to the output writers
+#[derive(Clone, Debug)]
+pub enum BusMsg {
+    Record(Arc<Record>),
+    /// Every record of the current input file has been broadcast
+    EndOfFile,
+}
+
+impl BusMsg {
+    #[inline]
+    pub fn into_record(self) -> Option<Arc<Record>> {
+        match self {
+            BusMsg::Record(r) => Some(r),
+            BusMsg::EndOfFile => None,
+        }
+    }
+}
+
 /// Custom serializer for `Option<Timestamp>` to produce ISO 8601 format
-fn serialize_optional_timestamp<S>(
+pub(crate) fn serialize_optional_timestamp<S>(
     timestamp: &Option<Timestamp>,
     serializer: S,
 ) -> Result<S::Ok, S::Error>

@@ -2,7 +2,7 @@
 
 struct Record {
     char path[];
-    be u64 event_id;
+    le u64 event_id;
     be u32 flag;
     le u64 node_id;
     u32 unknown;
