@@ -5,6 +5,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Output},
+    time::{Duration, SystemTime},
 };
 
 const FIXTURE: &str = "testfiles/v3/000000000342c4f2";
@@ -132,12 +133,26 @@ fn unparseable_input_fails() {
 
 #[test]
 fn old_files_in_a_directory_are_skipped_with_a_warning() {
-    // The fixture was written in 2024, so the default 90 day window excludes it. Write to a
-    // file rather than stdout so warnings are not silenced.
+    // A checkout does not preserve mtimes, so build a directory whose one log is a year old
+    // and add a decoy that the hex-name scan must ignore.
     let dir = scratch("old-files");
+    let logs = dir.join("logs");
+    fs::create_dir(&logs).unwrap();
+    let old_log = logs.join("000000000342c4f2");
+    fs::copy(FIXTURE, &old_log).unwrap();
+    fs::copy(FIXTURE, logs.join("not-a-log.gz")).unwrap();
+    let a_year_ago = SystemTime::now() - Duration::from_secs(365 * 24 * 60 * 60);
+    fs::File::options()
+        .write(true)
+        .open(&old_log)
+        .unwrap()
+        .set_modified(a_year_ago)
+        .unwrap();
+
+    // Write to a file rather than stdout so warnings are not silenced
     let target = dir.join("out.json");
-    let out = fse_dump(&["dump", "--json", path_str(&target), "testfiles/v3"]);
-    assert!(!out.status.success());
+    let out = fse_dump(&["dump", "--json", path_str(&target), path_str(&logs)]);
+    assert!(!out.status.success(), "{}", stderr(&out));
     let err = stderr(&out);
     assert!(err.contains("Skipped 1 file"), "{err}");
     assert!(err.contains("No fsevents files found"), "{err}");
@@ -146,9 +161,9 @@ fn old_files_in_a_directory_are_skipped_with_a_warning() {
         "no output file should be created when nothing is parsed"
     );
 
-    let out = fse_dump(&["dump", "--json", "-", "--days", "0", "testfiles/v3"]);
+    let out = fse_dump(&["dump", "--json", "-", "--days", "0", path_str(&logs)]);
     assert!(out.status.success(), "{}", stderr(&out));
-    // The directory scan only picks up hex-named files, so test_1.gz is not parsed twice
+    // The directory scan only picks up hex-named files, so the decoy is not parsed
     assert_eq!(stdout_lines(&out).len(), FIXTURE_RECORDS);
 }
 
