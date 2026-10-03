@@ -11,7 +11,7 @@ use color_eyre::{Result, eyre::eyre};
 use jiff::{Span, Zoned};
 use std::path::Path;
 
-use crate::record::RecordFilter;
+use crate::{finish::Finish, record::RecordFilter};
 
 /// Utility to dump the fsevent files on OSX
 #[derive(Debug, Parser)]
@@ -21,6 +21,8 @@ pub struct Cli {
     pub command: Commands,
 }
 
+// Dump dwarfs Generate, but the value is parsed once and matched once, so boxing buys nothing
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     /// Dump fsevents file into the wanted output files/format
@@ -37,7 +39,7 @@ pub enum Commands {
 
 #[derive(Debug, Args)]
 pub struct Generate {
-    /// If every fse record file we find should be dumped to a csv "next" to it (filename + .csv)
+    /// The shell to generate completions for
     #[arg(value_parser = value_parser!(Shell))]
     pub shell: Shell,
 }
@@ -49,7 +51,7 @@ pub struct Watch {
     #[arg(short = 'o', long, default_value = "json")]
     pub format: WatchFormat,
 
-    /// If the outupt should be "pretty" formatted (multi-line)
+    /// If the output should be "pretty" formatted (multi-line)
     #[arg(short = 'P', long)]
     pub pretty: bool,
 
@@ -97,8 +99,6 @@ pub struct Dump {
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
     ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
@@ -109,8 +109,6 @@ pub struct Dump {
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
     ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
-    ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
     #[arg(short, long)]
@@ -120,8 +118,6 @@ pub struct Dump {
     ///
     /// The records will be dumped in the order that they're given on the command line (any dir
     /// that is given is expanded to the record files within).
-    ///
-    /// If parallel is enabled than there is no guarantee of order (even within a single file)
     ///
     /// If the path ends in `.gz` or `.gzip` it will be gzip compressed.
     /// If it ends in `.zst` or `.zstd` it will be zstd compressed (requires zstd feature).
@@ -263,16 +259,18 @@ impl CompressOpts {
     }
 
     #[cfg(feature = "zstd")]
-    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::AutoFinishEncoder<'a, W>
+    /// The encoder is finished explicitly (see [`Finish`]) rather than on drop, so a failure
+    /// writing the frame trailer is reported instead of lost
+    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::write::Encoder<'a, W>
     where
         W: Write,
     {
         let mut z = zstd::stream::write::Encoder::new(w, self.zlvl()).unwrap();
         z.multithread(self.zthreads as u32).unwrap();
-        z.auto_finish()
+        z
     }
 
-    pub fn make_stdout(&self) -> BufWriter<Box<dyn Write>> {
+    pub fn make_stdout(&self) -> BufWriter<Box<dyn Finish>> {
         let out = std::io::stdout().lock();
 
         #[cfg(feature = "zstd")]
@@ -280,8 +278,10 @@ impl CompressOpts {
         #[cfg(not(feature = "zstd"))]
         let is_zstd = false;
 
+        // stdout is line buffered underneath; a large buffer here keeps json/yaml lines from
+        // turning into one write syscall each
         BufWriter::with_capacity(
-            512,
+            64 * 1024,
             if is_zstd {
                 #[cfg(feature = "zstd")]
                 {
@@ -316,6 +316,9 @@ impl Dump {
         if stdout_path(&self.json) {
             counts += 1
         };
+        if stdout_path(&self.yaml) {
+            counts += 1
+        };
         if stdout_path(&self.uniques) {
             counts += 1
         };
@@ -331,19 +334,16 @@ impl Dump {
 
         if !(self.csvs
             || self.jsons
+            || self.yamls
             || self.csv.is_some()
             || self.json.is_some()
+            || self.yaml.is_some()
             || self.uniques.is_some())
         {
             return Err(eyre!("You must specify at least one output type!",));
         }
 
         Ok(())
-    }
-
-    #[inline]
-    fn want_filename(str: &OsStr) -> bool {
-        str.to_string_lossy().chars().all(|c| c.is_ascii_hexdigit())
     }
 
     fn cutoff_time(&self) -> Option<SystemTime> {
@@ -361,14 +361,20 @@ impl Dump {
         }
     }
 
+    /// Expands the input arguments into the list of files to parse
+    ///
+    /// An input that cannot be read is reported and counted as a failure, but the others are
+    /// still returned so the run parses what it can; the caller decides what an empty list
+    /// means.
     pub fn real_files(&self) -> Vec<PathBuf> {
         let cutoff = self.cutoff_time();
 
         let mut files = Vec::with_capacity(128);
+        let mut skipped = 0usize;
 
         self.files.iter().for_each(|path| {
             match path.metadata() {
-                Err(err) => error!("Error processing '{}': {err}", path.display()),
+                Err(err) => fail!("Error processing '{}': {err}", path.display()),
                 Ok(info) => {
                     if info.is_dir() {
                         walkdir::WalkDir::new(path)
@@ -380,7 +386,7 @@ impl Dump {
                                 Ok(e) => {
                                     // Do the filename check first since it's fast and doesn't do
                                     // any metadata reads
-                                    if Dump::want_filename(e.file_name()) {
+                                    if is_fsevents_log_name(e.file_name()) {
                                         let want_file = if let Ok(m) = e.metadata() {
                                             if !m.is_dir() {
                                                 // See if we care about filtering by time
@@ -398,6 +404,7 @@ impl Dump {
                                                                 "Skipping {} due to time cutoff",
                                                                 e.path().display()
                                                             );
+                                                            skipped += 1;
                                                             false
                                                         }
                                                     } else {
@@ -425,21 +432,33 @@ impl Dump {
                                     }
                                 }
 
-                                Err(err) => {
-                                    error!("Error iterating the files: {err}");
-                                }
+                                Err(err) => fail!("Error iterating the files: {err}"),
                             });
                     } else if info.is_file() {
                         files.push(path.clone())
                     } else {
-                        error!("Unknown file type for '{}': {info:?}", path.display())
+                        fail!("Unknown file type for '{}': {info:?}", path.display());
                     }
                 }
             }
         });
 
+        if skipped > 0 {
+            warn!(
+                "Skipped {skipped} file(s) modified before the --days {} cutoff; pass --days 0 to include them",
+                self.pull_days
+            );
+        }
+
         files
     }
+}
+
+/// fseventsd names its logs after an event id, so a log file name is hex digits and nothing else
+#[inline]
+pub fn is_fsevents_log_name(name: &OsStr) -> bool {
+    let name = name.to_string_lossy();
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn get_opts() -> Result<Cli> {
@@ -700,6 +719,55 @@ mod tests {
     }
 
     #[test]
+    fn test_dump_validate_yaml_only() {
+        let mut dump = Dump {
+            csvs: false,
+            jsons: false,
+            yamls: false,
+            csv: None,
+            json: None,
+            yaml: Some(PathBuf::from("out.yaml")),
+            uniques: None,
+            unique_timestamps: false,
+            pull_days: 90,
+            files: vec![],
+            compress_opts: CompressOpts {
+                glevel: 7,
+                #[cfg(feature = "zstd")]
+                zlevel: 10,
+                #[cfg(feature = "zstd")]
+                zthreads: 2,
+                gzip: false,
+                #[cfg(feature = "zstd")]
+                zstd: false,
+            },
+            filter_opts: FilterOpts {
+                filter_paths: None,
+                any_flags: vec![],
+                all_flags: vec![],
+            },
+        };
+
+        assert!(
+            dump.validate(dump.stdout_counts()).is_ok(),
+            "--yaml alone is a valid output"
+        );
+
+        dump.yaml = None;
+        dump.yamls = true;
+        assert!(
+            dump.validate(dump.stdout_counts()).is_ok(),
+            "--yamls alone is a valid output"
+        );
+
+        dump.yamls = false;
+        dump.yaml = Some(PathBuf::from("-"));
+        dump.json = Some(PathBuf::from("-"));
+        assert_eq!(dump.stdout_counts(), 2, "yaml on stdout must be counted");
+        assert!(dump.validate(dump.stdout_counts()).is_err());
+    }
+
+    #[test]
     fn test_dump_validate_no_outputs() {
         let dump = Dump {
             csvs: false,
@@ -768,21 +836,21 @@ mod tests {
     }
 
     #[test]
-    fn test_dump_want_filename_hex_only() {
-        assert!(Dump::want_filename(OsStr::new("0123456789abcdef")));
-        assert!(Dump::want_filename(OsStr::new("ABCDEF")));
-        assert!(Dump::want_filename(OsStr::new("0")));
-        assert!(Dump::want_filename(OsStr::new("deadbeef")));
+    fn test_log_name_hex_only() {
+        assert!(is_fsevents_log_name(OsStr::new("0123456789abcdef")));
+        assert!(is_fsevents_log_name(OsStr::new("ABCDEF")));
+        assert!(is_fsevents_log_name(OsStr::new("0")));
+        assert!(is_fsevents_log_name(OsStr::new("deadbeef")));
     }
 
     #[test]
-    fn test_dump_want_filename_invalid() {
-        assert!(!Dump::want_filename(OsStr::new("not_hex")));
-        assert!(!Dump::want_filename(OsStr::new("file.txt")));
-        assert!(!Dump::want_filename(OsStr::new("123-456")));
-        assert!(!Dump::want_filename(OsStr::new("12g34")));
-        // Note: empty string actually returns true because .all() on empty iterator is true
-        // This is technically correct behavior - no non-hex chars in an empty string!
+    fn test_log_name_invalid() {
+        assert!(!is_fsevents_log_name(OsStr::new("not_hex")));
+        assert!(!is_fsevents_log_name(OsStr::new("file.txt")));
+        assert!(!is_fsevents_log_name(OsStr::new("123-456")));
+        assert!(!is_fsevents_log_name(OsStr::new("12g34")));
+        assert!(!is_fsevents_log_name(OsStr::new("fseventsd-uuid")));
+        assert!(!is_fsevents_log_name(OsStr::new("")));
     }
 
     #[test]

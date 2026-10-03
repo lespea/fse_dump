@@ -25,7 +25,7 @@ alt_flags = []
 extra_id = []
 
 hex = ["dep:serde-hex"]
-watch = ["dep:notify-debouncer-full"]
+watch = ["dep:crossbeam-channel", "dep:ctrlc", "dep:notify", "dep:notify-debouncer-full"]
 zstd = ["dep:zstd"]
 
 [dependencies]
@@ -34,23 +34,23 @@ byteorder = "1"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 color-eyre = { version = "0", default-features = false }
-crossbeam = "0"
-crossbeam-channel = "0"
+crossbeam-channel = { version = "0", optional = true }
 csv = "1"
+ctrlc = { version = "3", features = ["termination"], optional = true }
 env_logger = "0"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 hashbrown = "0"
 jiff = "0"
 log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
 mimalloc = { version = "0", features = ["secure"] }
-notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
+notify = { version = "8", default-features = false, features = ["macos_kqueue"], optional = true }
 notify-debouncer-full = { version = "0", optional = true }
 regex = "1"
 serde = { version = "1", features = ["rc"] }
 serde-hex = { version = "0", optional = true }
 serde_derive = "1"
 serde_json = "1"
-serde_yaml = "0"
+serde_yaml_ng = "0"
 walkdir = "2"
 zstd = { version = "0", features = ["zstdmt"], optional = true }
 

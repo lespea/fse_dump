@@ -130,9 +130,14 @@ where
             let path = String::from_utf8_lossy(&sbuf[..rlen - 1]).into_owned();
             debug!("Found path {path}");
 
-            let event_id = reader.read_u64::<BigEndian>()?;
+            // Event ids are stored little-endian; the log file's name is the hex of the id
+            // that follows the last record it contains.
+            let event_id = reader.read_u64::<LittleEndian>()?;
             debug!("Found event id {event_id}");
 
+            // The flag word is read big-endian on purpose: the `FLAGS` table follows the
+            // dlcowen/FSEventsParser convention, which is the byte-swapped view of the
+            // on-disk little-endian value.
             let flag = reader.read_u32::<BigEndian>()?;
             let flags = flags::parse_bits(flag);
             debug!("Found flags {flags:?}");
@@ -263,7 +268,7 @@ mod tests {
     fn test_v1_parser_basic_record() {
         let mut data = Vec::new();
         data.extend_from_slice(b"/test/path\0"); // path with null terminator
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes()); // event_id
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes()); // event_id
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes()); // flag (Modified)
 
         let mut cursor = Cursor::new(data);
@@ -283,7 +288,7 @@ mod tests {
     fn test_v2_parser_basic_record() {
         let mut data = Vec::new();
         data.extend_from_slice(b"/test/path\0");
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes()); // event_id
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes()); // event_id
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes()); // flag
         data.extend_from_slice(&0x0000_0000_0000_1234u64.to_le_bytes()); // node_id (little endian)
 
@@ -303,10 +308,10 @@ mod tests {
     fn test_v3_parser_basic_record() {
         let mut data = Vec::new();
         data.extend_from_slice(b"/test/path\0");
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes()); // event_id
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes()); // event_id
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes()); // flag
         data.extend_from_slice(&0x0000_0000_0000_1234u64.to_le_bytes()); // node_id
-        data.extend_from_slice(&0x5678u32.to_ne_bytes()); // extra_id (native endian)
+        data.extend_from_slice(&0x5678u32.to_le_bytes()); // extra_id (little endian)
 
         let mut cursor = Cursor::new(data);
         let result = V3::parse_record(&mut cursor).expect("Should parse");
@@ -326,7 +331,7 @@ mod tests {
     fn test_parser_empty_path() {
         let mut data = Vec::new();
         data.push(b'\0'); // Empty path
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes());
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -343,7 +348,7 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(long_path.as_bytes());
         data.push(b'\0');
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes());
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -360,7 +365,7 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(unicode_path.as_bytes());
         data.push(b'\0');
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes());
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -383,7 +388,7 @@ mod tests {
         let flags: u32 = 0x1000_0000 | 0x0100_0000 | 0x0000_8000; // Modified | Created | FileEvent
         let mut data = Vec::new();
         data.extend_from_slice(b"/test\0");
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes());
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes());
         data.extend_from_slice(&flags.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -401,7 +406,7 @@ mod tests {
     fn test_parser_zero_event_id() {
         let mut data = Vec::new();
         data.extend_from_slice(b"/test\0");
-        data.extend_from_slice(&0u64.to_be_bytes());
+        data.extend_from_slice(&0u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -416,7 +421,7 @@ mod tests {
     fn test_parser_max_event_id() {
         let mut data = Vec::new();
         data.extend_from_slice(b"/test\0");
-        data.extend_from_slice(&u64::MAX.to_be_bytes());
+        data.extend_from_slice(&u64::MAX.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let mut cursor = Cursor::new(data);
@@ -433,7 +438,7 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(path.as_bytes());
         data.push(b'\0');
-        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_be_bytes());
+        data.extend_from_slice(&0x0000_0000_0000_0042u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
 
         let expected_size = path.len() + 1 + 8 + 4; // path + null + u64 + u32
@@ -452,7 +457,7 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(path.as_bytes());
         data.push(b'\0');
-        data.extend_from_slice(&0x42u64.to_be_bytes());
+        data.extend_from_slice(&0x42u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
         data.extend_from_slice(&0x1234u64.to_le_bytes());
 
@@ -472,10 +477,10 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(path.as_bytes());
         data.push(b'\0');
-        data.extend_from_slice(&0x42u64.to_be_bytes());
+        data.extend_from_slice(&0x42u64.to_le_bytes());
         data.extend_from_slice(&0x1000_0000u32.to_be_bytes());
         data.extend_from_slice(&0x1234u64.to_le_bytes());
-        data.extend_from_slice(&0x5678u32.to_ne_bytes());
+        data.extend_from_slice(&0x5678u32.to_le_bytes());
 
         let expected_size = path.len() + 1 + 8 + 4 + 8 + 4; // path + null + u64 + u32 + u64 + u32
 
