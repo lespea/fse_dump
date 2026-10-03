@@ -41,6 +41,20 @@ jobs:
       - run: cargo test --no-default-features --features "${{ matrix.features }}"
         name: test
 
+  # The release workflow tests with --release, where debug! logging is compiled out; run the
+  # same way here so a tag push is never the first time the tests meet a release build
+  test-release:
+    name: Test Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release
+      - run: cargo test --release --verbose
+        name: test
+
   test-stable:
     name: Test Stable
     runs-on: ${{ matrix.os }}
