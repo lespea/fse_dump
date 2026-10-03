@@ -43,10 +43,16 @@ struct WatchRun {
 impl WatchRun {
     /// Starts watching `dir` with `args` and waits until the watcher reports it is in place
     fn start(dir: &Path, args: &[&str]) -> Self {
+        Self::start_with_env(dir, args, &[])
+    }
+
+    /// [`WatchRun::start`] with extra environment variables for the process
+    fn start_with_env(dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Self {
         let mut child = bin()
             .arg("watch")
             .args(args)
             .arg(dir)
+            .envs(env.iter().copied())
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -325,26 +331,32 @@ fn pretty_json_is_a_multiline_stream() {
 #[test]
 fn only_hex_named_files_are_parsed() {
     let dir = scratch("names");
-    let mut run = WatchRun::start(&dir, &[]);
+    // Debug logging shows the watch deciding to ignore a file, which is the only way to see
+    // that a decoy's create event was processed rather than never delivered
+    let mut run = WatchRun::start_with_env(&dir, &[], &[("RUST_LOG", "debug")]);
 
-    // The decoys fseventsd keeps next to its logs, plus something unrelated
+    // The file fseventsd keeps next to its logs. It is created on its own and its ignore line
+    // awaited before the log goes in: notify's kqueue backend reports only one new file per
+    // directory write it sees, so files created back to back can go unannounced on macOS.
     let uuid = add_fixture(&dir, "fseventsd-uuid");
-    let notes = add_fixture(&dir, "notes.txt");
+    let ignored = format!("Ignoring non-log file {}", uuid.display());
+    assert!(
+        run.wait_until(NOTICE, |r| r.stderr.contains(&ignored)),
+        "never saw {ignored:?}:\n{}",
+        run.stderr
+    );
+
     let log = add_fixture(&dir, "000000000342c4f3");
     run.expect_parsed(&log);
     run.expect_lines(FIXTURE_RECORDS);
 
     let done = run.stop("INT");
     done.assert_clean();
-    for decoy in [&uuid, &notes] {
-        assert!(
-            !done
-                .stderr
-                .contains(&format!("Parsing {}", decoy.display())),
-            "{}",
-            done.stderr
-        );
-    }
+    assert!(
+        !done.stderr.contains(&format!("Parsing {}", uuid.display())),
+        "{}",
+        done.stderr
+    );
     assert_eq!(
         done.json().len(),
         FIXTURE_RECORDS,
