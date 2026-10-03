@@ -414,11 +414,11 @@ When exporting to YAML, **fse_dump** produces a multi-document stream, where eac
 ```yaml
 ---
 path: Users/alice/file.txt
-event_id: '0x123'
+event_id: "0x123"
 flags: Created
 ---
 path: Users/alice/file.txt
-event_id: '0x124'
+event_id: "0x124"
 flags: Modified
 ```
 
