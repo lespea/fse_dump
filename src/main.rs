@@ -7,16 +7,16 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+mod fail;
+
 use std::{
     collections::BTreeMap,
     convert::identity,
     fs::File,
     io::{self, BufWriter, Write},
     path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::Arc,
     thread,
 };
 
@@ -41,27 +41,6 @@ use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-/// Number of errors logged while running; a non-zero count makes the process exit non-zero
-static FAILURES: AtomicUsize = AtomicUsize::new(0);
-
-/// Logs an error and records it so the final exit status reflects it
-macro_rules! fail {
-    ($($arg:tt)*) => {{
-        log::error!($($arg)*);
-        FAILURES.fetch_add(1, Ordering::Relaxed);
-    }};
-}
-
-/// Turns the recorded failures into the process's final result
-fn finish(what: &str) -> Result<()> {
-    match FAILURES.load(Ordering::Relaxed) {
-        0 => Ok(()),
-        n => Err(color_eyre::eyre::eyre!(
-            "{n} error(s) occurred while {what}; see the log above"
-        )),
-    }
-}
 
 fn main() -> Result<()> {
     match opts::get_opts()?.command {
@@ -379,7 +358,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
     color_eyre::install()?;
 
     opts.validate(std_counts)?;
-    let file_paths = opts.real_files()?;
+    let file_paths = opts.real_files();
     if file_paths.is_empty() {
         return Err(color_eyre::eyre::eyre!(
             "No fsevents files found to parse (check the paths and the --days cutoff)"
@@ -501,7 +480,7 @@ fn dump(opts: opts::Dump) -> Result<()> {
         }
     });
 
-    finish("dumping")
+    fail::exit_result("dumping")
 }
 
 fn generate(g: Generate) -> Result<()> {
@@ -646,5 +625,5 @@ fn watch(opts: opts::Watch) -> Result<()> {
         drop(bus);
     });
 
-    finish("watching")
+    fail::exit_result("watching")
 }

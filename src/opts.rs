@@ -361,20 +361,18 @@ impl Dump {
 
     /// Expands the input arguments into the list of files to parse
     ///
-    /// Fails if any input path cannot be read; the caller decides what an empty list means.
-    pub fn real_files(&self) -> Result<Vec<PathBuf>> {
+    /// An input that cannot be read is reported and counted as a failure, but the others are
+    /// still returned so the run parses what it can; the caller decides what an empty list
+    /// means.
+    pub fn real_files(&self) -> Vec<PathBuf> {
         let cutoff = self.cutoff_time();
 
         let mut files = Vec::with_capacity(128);
-        let mut errors = 0usize;
         let mut skipped = 0usize;
 
         self.files.iter().for_each(|path| {
             match path.metadata() {
-                Err(err) => {
-                    error!("Error processing '{}': {err}", path.display());
-                    errors += 1;
-                }
+                Err(err) => fail!("Error processing '{}': {err}", path.display()),
                 Ok(info) => {
                     if info.is_dir() {
                         walkdir::WalkDir::new(path)
@@ -432,16 +430,12 @@ impl Dump {
                                     }
                                 }
 
-                                Err(err) => {
-                                    error!("Error iterating the files: {err}");
-                                    errors += 1;
-                                }
+                                Err(err) => fail!("Error iterating the files: {err}"),
                             });
                     } else if info.is_file() {
                         files.push(path.clone())
                     } else {
-                        error!("Unknown file type for '{}': {info:?}", path.display());
-                        errors += 1;
+                        fail!("Unknown file type for '{}': {info:?}", path.display());
                     }
                 }
             }
@@ -454,11 +448,7 @@ impl Dump {
             );
         }
 
-        if errors > 0 {
-            return Err(eyre!("{errors} input path(s) could not be read"));
-        }
-
-        Ok(files)
+        files
     }
 }
 
