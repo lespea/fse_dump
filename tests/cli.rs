@@ -1,94 +1,11 @@
 //! End-to-end checks of the command line surface
 
-use std::{
-    fs,
-    io::{Read, Write},
-    ops::Deref,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-    time::{Duration, SystemTime},
-};
+use std::{fs, io::Read};
 
-const FIXTURE: &str = "testfiles/v3/000000000342c4f2";
-const FIXTURE_RECORDS: usize = 2730;
+use serde::Deserialize;
 
-fn fse_dump(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_fse_dump"))
-        .args(args)
-        .output()
-        .expect("failed to run fse_dump")
-}
-
-fn stdout_lines(out: &Output) -> Vec<String> {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(str::to_owned)
-        .collect()
-}
-
-fn stderr(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stderr).into_owned()
-}
-
-/// A fresh scratch directory per test, removed again when the test is done
-struct Scratch(PathBuf);
-
-impl Deref for Scratch {
-    type Target = Path;
-
-    fn deref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
-}
-
-fn scratch(name: &str) -> Scratch {
-    let dir = std::env::temp_dir().join(format!("fse_dump-cli-{}-{name}", std::process::id()));
-    let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(&dir).unwrap();
-    Scratch(dir)
-}
-
-fn set_a_year_old(path: &Path) {
-    let a_year_ago = SystemTime::now() - Duration::from_secs(365 * 24 * 60 * 60);
-    fs::File::options()
-        .write(true)
-        .open(path)
-        .unwrap()
-        .set_modified(a_year_ago)
-        .unwrap();
-}
-
-/// A gzipped v2 page holding `paths`, cut `chop` bytes short of its declared length
-fn truncated_v2_log(dir: &Path, paths: &[&str], chop: usize) -> PathBuf {
-    let mut body = Vec::new();
-    for (i, p) in paths.iter().enumerate() {
-        body.extend_from_slice(p.as_bytes());
-        body.push(0);
-        body.extend_from_slice(&(i as u64 + 1).to_le_bytes()); // event id
-        body.extend_from_slice(&0x1000_0000u32.to_be_bytes()); // Modified
-        body.extend_from_slice(&(i as u64 + 100).to_le_bytes()); // node id
-    }
-    let mut page = b"2SLD\0\0\0\0".to_vec();
-    page.extend_from_slice(&((12 + body.len()) as u32).to_le_bytes());
-    page.extend_from_slice(&body);
-    page.truncate(page.len() - chop);
-
-    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
-    gz.write_all(&page).unwrap();
-    let path = dir.join("0000000000000010");
-    fs::write(&path, gz.finish().unwrap()).unwrap();
-    path
-}
-
-fn path_str(p: &Path) -> &str {
-    p.to_str().unwrap()
-}
+mod common;
+use common::*;
 
 #[test]
 fn json_to_stdout_has_every_record() {
@@ -181,7 +98,7 @@ fn unreadable_input_does_not_stop_the_others() {
 #[test]
 fn truncated_input_emits_what_it_can_and_fails() {
     let dir = scratch("truncated");
-    let log = truncated_v2_log(&dir, &["/a", "/b", "/c"], 5);
+    let log = v2_log(&dir, "0000000000000010", &["/a", "/b", "/c"], 5);
 
     let out = fse_dump(&["dump", "--json", "-", path_str(&log)]);
     assert!(!out.status.success(), "truncation must fail the run");
