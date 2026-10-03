@@ -414,20 +414,21 @@ When exporting to YAML, **fse_dump** produces a multi-document stream, where eac
 ```yaml
 ---
 path: Users/alice/file.txt
-event_id: "0x123"
+event_id: '0x123'
 flags: Created
 ---
 path: Users/alice/file.txt
-event_id: "0x124"
+event_id: '0x124'
 flags: Modified
 ```
 
 ## Exit Status
 
-`fse_dump` exits non-zero if anything went wrong: an input that could not be read or parsed, an
-output file that could not be created, a write failure, invalid options, or an input list that
-expanded to no files. Errors are logged to stderr as they happen; the final message states how
-many occurred.
+`fse_dump` exits non-zero if anything went wrong: an input that could not be read or parsed
+(including a truncated log), an output file that could not be created, a write failure, invalid
+options, or an input list that expanded to no files. A bad input does not stop the others from
+being parsed, and the records read from a truncated log before the cut are still written. Errors
+are logged to stderr as they happen; the final message states how many occurred.
 
 ## Advanced Usage
 
@@ -565,8 +566,8 @@ cargo test
 # Run with debug logging (debug-level messages are compiled out of release builds)
 RUST_LOG=debug cargo run -- dump --json output.json
 
-# Check every feature combination the way CI does
-just allclippy
+# Lint and test every feature combination the way CI does
+just ci
 
 # Check code
 cargo clippy

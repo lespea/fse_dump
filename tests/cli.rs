@@ -2,7 +2,8 @@
 
 use std::{
     fs,
-    io::Read,
+    io::{Read, Write},
+    ops::Deref,
     path::{Path, PathBuf},
     process::{Command, Output},
     time::{Duration, SystemTime},
@@ -29,12 +30,60 @@ fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
-/// A fresh scratch directory per test
-fn scratch(name: &str) -> PathBuf {
+/// A fresh scratch directory per test, removed again when the test is done
+struct Scratch(PathBuf);
+
+impl Deref for Scratch {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn scratch(name: &str) -> Scratch {
     let dir = std::env::temp_dir().join(format!("fse_dump-cli-{}-{name}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    dir
+    Scratch(dir)
+}
+
+fn set_a_year_old(path: &Path) {
+    let a_year_ago = SystemTime::now() - Duration::from_secs(365 * 24 * 60 * 60);
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(a_year_ago)
+        .unwrap();
+}
+
+/// A gzipped v2 page holding `paths`, cut `chop` bytes short of its declared length
+fn truncated_v2_log(dir: &Path, paths: &[&str], chop: usize) -> PathBuf {
+    let mut body = Vec::new();
+    for (i, p) in paths.iter().enumerate() {
+        body.extend_from_slice(p.as_bytes());
+        body.push(0);
+        body.extend_from_slice(&(i as u64 + 1).to_le_bytes()); // event id
+        body.extend_from_slice(&0x1000_0000u32.to_be_bytes()); // Modified
+        body.extend_from_slice(&(i as u64 + 100).to_le_bytes()); // node id
+    }
+    let mut page = b"2SLD\0\0\0\0".to_vec();
+    page.extend_from_slice(&((12 + body.len()) as u32).to_le_bytes());
+    page.extend_from_slice(&body);
+    page.truncate(page.len() - chop);
+
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    gz.write_all(&page).unwrap();
+    let path = dir.join("0000000000000010");
+    fs::write(&path, gz.finish().unwrap()).unwrap();
+    path
 }
 
 fn path_str(p: &Path) -> &str {
@@ -114,6 +163,38 @@ fn missing_input_fails() {
 }
 
 #[test]
+fn unreadable_input_does_not_stop_the_others() {
+    let out = fse_dump(&["dump", "--json", "-", "/definitely/not/here", FIXTURE]);
+    assert!(!out.status.success(), "a bad input must fail the run");
+    assert!(
+        stderr(&out).contains("/definitely/not/here"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        stdout_lines(&out).len(),
+        FIXTURE_RECORDS,
+        "the readable input is still parsed"
+    );
+}
+
+#[test]
+fn truncated_input_emits_what_it_can_and_fails() {
+    let dir = scratch("truncated");
+    let log = truncated_v2_log(&dir, &["/a", "/b", "/c"], 5);
+
+    let out = fse_dump(&["dump", "--json", "-", path_str(&log)]);
+    assert!(!out.status.success(), "truncation must fail the run");
+    assert!(stderr(&out).contains("truncated"), "{}", stderr(&out));
+    let lines = stdout_lines(&out);
+    assert_eq!(
+        lines.len(),
+        2,
+        "the complete records are still written: {lines:?}"
+    );
+}
+
+#[test]
 fn unknown_flag_name_fails() {
     let out = fse_dump(&["dump", "--json", "-", "-f", "Bogus", FIXTURE]);
     assert!(!out.status.success());
@@ -133,23 +214,38 @@ fn unparseable_input_fails() {
 
 #[test]
 fn old_files_in_a_directory_are_skipped_with_a_warning() {
-    // A checkout does not preserve mtimes, so build a directory whose one log is a year old
-    // and add a decoy that the hex-name scan must ignore.
+    // A checkout does not preserve mtimes, so build a directory with one log a year old and
+    // one fresh copy, plus a decoy that the hex-name scan must ignore.
     let dir = scratch("old-files");
     let logs = dir.join("logs");
     fs::create_dir(&logs).unwrap();
     let old_log = logs.join("000000000342c4f2");
     fs::copy(FIXTURE, &old_log).unwrap();
+    fs::copy(FIXTURE, logs.join("000000000342c4f3")).unwrap();
     fs::copy(FIXTURE, logs.join("not-a-log.gz")).unwrap();
-    let a_year_ago = SystemTime::now() - Duration::from_secs(365 * 24 * 60 * 60);
-    fs::File::options()
-        .write(true)
-        .open(&old_log)
-        .unwrap()
-        .set_modified(a_year_ago)
-        .unwrap();
+    set_a_year_old(&old_log);
 
-    // Write to a file rather than stdout so warnings are not silenced
+    // The skip is reported even when the records go to stdout
+    let out = fse_dump(&["dump", "--json", "-", path_str(&logs)]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    assert_eq!(stdout_lines(&out).len(), FIXTURE_RECORDS);
+    assert!(stderr(&out).contains("Skipped 1 file"), "{}", stderr(&out));
+
+    let out = fse_dump(&["dump", "--json", "-", "--days", "0", path_str(&logs)]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    // Both logs are parsed and the decoy is not
+    assert_eq!(stdout_lines(&out).len(), 2 * FIXTURE_RECORDS);
+}
+
+#[test]
+fn nothing_left_after_the_days_cutoff_fails() {
+    let dir = scratch("all-old");
+    let logs = dir.join("logs");
+    fs::create_dir(&logs).unwrap();
+    let old_log = logs.join("000000000342c4f2");
+    fs::copy(FIXTURE, &old_log).unwrap();
+    set_a_year_old(&old_log);
+
     let target = dir.join("out.json");
     let out = fse_dump(&["dump", "--json", path_str(&target), path_str(&logs)]);
     assert!(!out.status.success(), "{}", stderr(&out));
@@ -160,11 +256,6 @@ fn old_files_in_a_directory_are_skipped_with_a_warning() {
         !target.exists(),
         "no output file should be created when nothing is parsed"
     );
-
-    let out = fse_dump(&["dump", "--json", "-", "--days", "0", path_str(&logs)]);
-    assert!(out.status.success(), "{}", stderr(&out));
-    // The directory scan only picks up hex-named files, so the decoy is not parsed
-    assert_eq!(stdout_lines(&out).len(), FIXTURE_RECORDS);
 }
 
 #[test]
