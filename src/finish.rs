@@ -128,6 +128,26 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
     }
 
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn zstd_finish_reports_the_inner_error() {
+        let w = zstd::stream::write::Encoder::new(FailsOnFlush, 1).unwrap();
+        let err = Finish::finish(w).expect_err("the flush failure must surface");
+        assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+    }
+
+    #[test]
+    fn file_finish_flushes_and_succeeds() {
+        let dir = std::env::temp_dir().join(format!("fse_dump-finish-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out");
+        let mut w = BufWriter::new(File::create(&path).unwrap());
+        w.write_all(b"written").unwrap();
+        w.finish().expect("a healthy file finishes cleanly");
+        assert_eq!(std::fs::read(&path).unwrap(), b"written");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn gzip_finish_reports_the_inner_error() {
         let w = flate2::write::GzEncoder::new(FailsOnFlush, flate2::Compression::fast());

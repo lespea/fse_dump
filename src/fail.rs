@@ -33,3 +33,19 @@ pub fn exit_result(what: &str) -> Result<()> {
         )),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The counter is process-wide and other tests in this binary may add to it, so only what
+    // this test can see for certain is asserted
+    #[test]
+    fn recorded_failures_make_the_exit_result_an_error() {
+        record();
+        let err = exit_result("testing").expect_err("a recorded failure fails the run");
+        let msg = err.to_string();
+        assert!(msg.contains("error(s) occurred while testing"), "{msg}");
+        assert!(FAILURES.load(Ordering::Relaxed) >= 1);
+    }
+}
