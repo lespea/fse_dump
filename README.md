@@ -324,7 +324,8 @@ fse_dump watch \
 # Watch custom directory with CSV output
 fse_dump watch -o csv /custom/fsevents/path
 
-# Watch with compression (pipe to file); Ctrl-C or SIGTERM finishes the stream cleanly
+# Watch with compression (pipe to file); Ctrl-C or SIGTERM finishes the stream cleanly,
+# and a second one exits at once
 fse_dump watch --gzip > events.json.gz
 ```
 

@@ -506,7 +506,10 @@ fn generate(g: Generate) -> Result<()> {
 
 #[cfg(feature = "watch")]
 fn watch(opts: opts::Watch) -> Result<()> {
-    use std::time::Duration;
+    use std::{
+        sync::atomic::{AtomicBool, Ordering},
+        time::Duration,
+    };
 
     use crossbeam_channel::select;
     use notify_debouncer_full::{
@@ -529,9 +532,15 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     let (send, recv) = crossbeam_channel::bounded(128);
 
-    // Ctrl-C / SIGTERM stop the loop below so the output stream gets its trailer written
+    // Ctrl-C / SIGTERM stop the loop below so the output stream gets its trailer written; a
+    // second signal means that shutdown is stuck or too slow, so it exits on the spot
     let (stop_send, stop_recv) = crossbeam_channel::bounded::<()>(1);
+    let interrupted = AtomicBool::new(false);
     ctrlc::set_handler(move || {
+        if interrupted.swap(true, Ordering::SeqCst) {
+            error!("Interrupted again; exiting without finishing the output");
+            std::process::exit(130);
+        }
         let _ = stop_send.try_send(());
     })?;
 
@@ -611,6 +620,13 @@ fn watch(opts: opts::Watch) -> Result<()> {
         });
 
         loop {
+            // While the bus is open the writer only stops when its output failed, which it has
+            // already reported; keeping the watch alive would just hide that
+            if writer.is_finished() {
+                warn!("The output writer stopped; ending the watch");
+                break;
+            }
+
             select! {
                 recv(recv) -> msg => match msg {
                     Ok(path) => {
@@ -624,13 +640,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
                     info!("Interrupted; finishing the output");
                     break;
                 }
-                default(Duration::from_millis(500)) => {
-                    // Nothing to write to any more; keeping the watch alive would only hide it
-                    if writer.is_finished() {
-                        fail!("The output writer stopped unexpectedly");
-                        break;
-                    }
-                }
+                // Wakes up now and then so the writer is re-checked while nothing arrives
+                default(Duration::from_millis(500)) => {}
             }
         }
 
