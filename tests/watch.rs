@@ -331,20 +331,26 @@ fn pretty_json_is_a_multiline_stream() {
 #[test]
 fn only_hex_named_files_are_parsed() {
     let dir = scratch("names");
-    // Debug logging shows the watch deciding to ignore a file, which is the only way to see
-    // that a decoy's create event was processed rather than never delivered
     let mut run = WatchRun::start_with_env(&dir, &[], &[("RUST_LOG", "debug")]);
 
-    // The file fseventsd keeps next to its logs. It is created on its own and its ignore line
-    // awaited before the log goes in: notify's kqueue backend reports only one new file per
-    // directory write it sees, so files created back to back can go unannounced on macOS.
+    // The file fseventsd keeps next to its logs. It is created on its own and acknowledged
+    // before the log goes in: notify's kqueue backend reports only one new file per directory
+    // write it sees, so files created back to back can go unannounced on macOS.
     let uuid = add_fixture(&dir, "fseventsd-uuid");
-    let ignored = format!("Ignoring non-log file {}", uuid.display());
-    assert!(
-        run.wait_until(NOTICE, |r| r.stderr.contains(&ignored)),
-        "never saw {ignored:?}:\n{}",
-        run.stderr
-    );
+    if cfg!(debug_assertions) {
+        // A debug build logs the decision to ignore a file, which proves the decoy's create
+        // event was processed rather than never delivered
+        let ignored = format!("Ignoring non-log file {}", uuid.display());
+        assert!(
+            run.wait_until(NOTICE, |r| r.stderr.contains(&ignored)),
+            "never saw {ignored:?}:\n{}",
+            run.stderr
+        );
+    } else {
+        // Release builds compile debug logging out (see the log features in Cargo.toml), so
+        // there is nothing to wait for; the watcher only needs a moment to see the decoy
+        thread::sleep(Duration::from_secs(3));
+    }
 
     let log = add_fixture(&dir, "000000000342c4f3");
     run.expect_parsed(&log);
