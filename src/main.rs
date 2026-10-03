@@ -579,8 +579,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
         )?;
 
         for path in opts.watch_dirs {
-            info!("Watching {}", path.display());
             debouncer.watch(&path, RecursiveMode::Recursive)?;
+            info!("Watching {}", path.display());
         }
 
         Box::new(debouncer)
@@ -594,8 +594,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
         )?;
 
         for path in opts.watch_dirs {
-            info!("Watching {}", path.display());
             debouncer.watch(&path, RecursiveMode::Recursive)?;
+            info!("Watching {}", path.display());
         }
 
         Box::new(debouncer)
@@ -629,11 +629,10 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
             select! {
                 recv(recv) -> msg => match msg {
-                    Ok(path) => {
-                        if let Err(err) = parse_file(&path, &mut bus, &rec_filter) {
-                            fail!("Error parsing {}: {err}", path.display());
-                        }
-                    }
+                    Ok(path) => match parse_file(&path, &mut bus, &rec_filter) {
+                        Ok(()) => info!("Finished parsing {}", path.display()),
+                        Err(err) => fail!("Error parsing {}: {err}", path.display()),
+                    },
                     Err(_) => break,
                 },
                 recv(stop_recv) -> _ => {
