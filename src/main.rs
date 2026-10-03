@@ -340,8 +340,10 @@ fn dump(opts: opts::Dump) -> Result<()> {
     env_logger::Builder::new()
         .filter(
             None,
+            // Logs go to stderr either way; when stdout carries the data, keep progress
+            // chatter out of the terminal but still show what was skipped or went wrong
             if std_counts == 1 {
-                LevelFilter::Error
+                LevelFilter::Warn
             } else {
                 LevelFilter::Info
             },
