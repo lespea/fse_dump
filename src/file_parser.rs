@@ -12,7 +12,7 @@ use std::{
 
 use bus::Bus;
 use byteorder::{LittleEndian, ReadBytesExt};
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{Report, Result, eyre::eyre};
 use flate2::read::MultiGzDecoder;
 use jiff::Timestamp;
 
@@ -39,6 +39,8 @@ use crate::{
 /// - The file cannot be opened or read
 /// - The file has an unsupported format version
 /// - Record lengths don't match expected values
+/// - The file ends before a page's declared length (it is truncated); the records read up to
+///   that point have already been broadcast
 pub fn parse_file(in_file: &Path, bus: &mut Bus<BusMsg>, filter: &RecordFilter) -> Result<()> {
     info!("Parsing {}", in_file.display());
 
@@ -53,18 +55,17 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<BusMsg>, filter: &RecordFilter) 
 
     loop {
         debug!("starting loop");
+
+        // A page boundary is the only place the file may end; everything past here that stops
+        // short of what a header promised is truncation
+        if reader.fill_buf()?.is_empty() {
+            debug!("eof");
+            break;
+        }
+
         let v = match version::Version::from_reader(&mut reader) {
-            Err(e) => {
-                if e.kind() == ErrorKind::UnexpectedEof {
-                    debug!("eof");
-                    break;
-                }
-
-                return Err(e.into());
-            }
-
+            Err(e) => return Err(header_err(e)),
             Ok(Some(v)) => v,
-
             Ok(None) => {
                 return Err(eyre!(
                     "Unsupported or invalid file version for: {}",
@@ -74,58 +75,51 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<BusMsg>, filter: &RecordFilter) 
         };
         let parse_fun = v.get_parser();
 
-        reader.read_exact(&mut [0u8; 4])?;
-        let p_len = reader.read_u32::<LittleEndian>()? as usize;
+        reader.read_exact(&mut [0u8; 4]).map_err(header_err)?;
+        let p_len = reader.read_u32::<LittleEndian>().map_err(header_err)? as usize;
 
         debug!("{v:?} :: {p_len}");
 
         let mut read = 12usize;
 
         loop {
+            // A page ends exactly where its header said it would. Checking before reading keeps
+            // an empty page from having the next page's header parsed as a record.
+            if read == p_len {
+                break;
+            }
+            if read > p_len {
+                return Err(overrun(read, p_len));
+            }
+
             let mut rec = match parse_fun(&mut reader) {
-                // Ran out of bytes part way through a record's fixed-width fields
-                Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
-                    warn!(
-                        "{}: file ended inside a record after {read} of {p_len} page bytes; the file is truncated or corrupt",
-                        in_file.display()
-                    );
-                    return Ok(());
-                }
-                Err(e) => return Err(e.into()),
-                Ok(None) => {
-                    if read < p_len {
-                        warn!(
-                            "{}: page ended after {read} of {p_len} bytes; the file is truncated or corrupt",
-                            in_file.display()
-                        );
-                    }
-                    break;
-                }
                 Ok(Some((s, rec))) => {
-                    debug!("Read {s} bits");
+                    debug!("Read {s} bytes");
                     read += s;
                     rec
                 }
+                // Ran out of bytes at a record boundary (or inside a path) before the page's end
+                Ok(None) => {
+                    return Err(eyre!(
+                        "page ended after {read} of {p_len} bytes; the file is truncated or corrupt"
+                    ));
+                }
+                // Ran out of bytes part way through a record's fixed-width fields
+                Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                    return Err(eyre!(
+                        "file ended inside a record after {read} of {p_len} page bytes; the file is truncated or corrupt"
+                    ));
+                }
+                Err(e) => return Err(e.into()),
             };
+
+            // A record that crosses the page boundary is corrupt, so don't pass it on
+            if read > p_len {
+                return Err(overrun(read, p_len));
+            }
 
             // Set the file timestamp on the record
             rec.file_timestamp = file_timestamp;
-
-            // Check length before filtering to avoid reading past page boundary
-            if read >= p_len {
-                if read == p_len {
-                    debug!("Wanted len");
-                    // Still broadcast if filter accepts it
-                    if filter.want(&rec) {
-                        bus.broadcast(BusMsg::Record(Arc::new(rec)));
-                    } else {
-                        debug!("Skipping {rec:?} due to the filters");
-                    }
-                    break;
-                } else {
-                    return Err(eyre!("Length of page records didn't match expected length",));
-                }
-            }
 
             if !filter.want(&rec) {
                 debug!("Skipping {rec:?} due to the filters");
@@ -137,6 +131,20 @@ pub fn parse_file(in_file: &Path, bus: &mut Bus<BusMsg>, filter: &RecordFilter) 
     }
 
     Ok(())
+}
+
+/// The error for a page header that could not be read in full
+fn header_err(e: std::io::Error) -> Report {
+    if e.kind() == ErrorKind::UnexpectedEof {
+        eyre!("file ended inside a page header; the file is truncated or corrupt")
+    } else {
+        e.into()
+    }
+}
+
+/// The error for records that run past the end of their page
+fn overrun(read: usize, p_len: usize) -> Report {
+    eyre!("Length of page records didn't match expected length ({read} > {p_len} bytes)")
 }
 
 #[cfg(test)]
@@ -187,21 +195,46 @@ mod tests {
         page
     }
 
-    /// Gzip `raw` (optionally truncated to `keep` bytes first) into a fresh temp file
-    pub(crate) fn write_fixture(name: &str, raw: &[u8], keep: Option<usize>) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("fse_dump-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(name);
+    /// A scratch directory for one test, removed again when the test is done
+    pub(crate) struct Scratch(PathBuf);
 
-        let raw = &raw[..keep.unwrap_or(raw.len())];
-        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
-        gz.write_all(raw).unwrap();
-        std::fs::write(&path, gz.finish().unwrap()).unwrap();
-        path
+    impl Scratch {
+        pub(crate) fn new(name: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("fse_dump-test-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+
+        pub(crate) fn join(&self, name: &str) -> PathBuf {
+            self.0.join(name)
+        }
+
+        /// Gzip `raw` (optionally truncated to `keep` bytes first) into a file in here
+        pub(crate) fn gz_fixture(&self, name: &str, raw: &[u8], keep: Option<usize>) -> PathBuf {
+            let raw = &raw[..keep.unwrap_or(raw.len())];
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            gz.write_all(raw).unwrap();
+            self.write(name, &gz.finish().unwrap())
+        }
+
+        /// Write `bytes` as they are into a file in here
+        pub(crate) fn write(&self, name: &str, bytes: &[u8]) -> PathBuf {
+            let path = self.join(name);
+            std::fs::write(&path, bytes).unwrap();
+            path
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 
     #[test]
-    fn test_truncated_page_returns_partial_records() {
+    fn test_truncated_page_emits_partial_records_then_fails() {
         let recs = [
             FakeRec("/a", 1, 0x1000_0000, Some(10), None),
             FakeRec("/b", 2, 0x1000_0000, Some(11), None),
@@ -209,16 +242,59 @@ mod tests {
         ];
         let page = encode_page(b"2SLD", &recs);
         // Chop the file part way through the last record's fixed-width fields
-        let path = write_fixture("truncated_v2", &page, Some(page.len() - 5));
+        let dir = Scratch::new("truncated_v2");
+        let path = dir.gz_fixture("log", &page, Some(page.len() - 5));
 
         let mut bus = Bus::new(16);
         let recv = bus.add_rx();
-        parse_file(&path, &mut bus, &RecordFilter::default())
-            .expect("a truncated page is reported, not fatal");
+        let err = parse_file(&path, &mut bus, &RecordFilter::default())
+            .expect_err("a truncated page fails the file");
+        drop(bus);
+        assert!(err.to_string().contains("truncated"), "{err}");
+
+        // Everything before the cut is still delivered
+        let paths: Vec<_> = records(recv).iter().map(|r| r.path.clone()).collect();
+        assert_eq!(paths, vec!["/a", "/b"]);
+    }
+
+    #[test]
+    fn test_truncated_gzip_stream_is_an_error() {
+        let recs = [
+            FakeRec("/a", 1, 0x1000_0000, Some(10), None),
+            FakeRec("/b", 2, 0x1000_0000, Some(11), None),
+        ];
+        let dir = Scratch::new("truncated_gzip");
+        let whole =
+            std::fs::read(dir.gz_fixture("whole", &encode_page(b"2SLD", &recs), None)).unwrap();
+        // Cut the compressed stream itself, as a copy that was interrupted would be
+        let path = dir.write("log", &whole[..whole.len() - 12]);
+
+        let mut bus = Bus::new(16);
+        let _recv = bus.add_rx();
+        let err = parse_file(&path, &mut bus, &RecordFilter::default())
+            .expect_err("a cut gzip stream must not look like a clean end");
+        assert!(!err.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_empty_page_does_not_swallow_the_next_one() {
+        // A page whose length covers only its header must not have the next page's magic
+        // parsed as a record path
+        let mut raw = encode_page(b"3SLD", &[]);
+        raw.extend(encode_page(
+            b"3SLD",
+            &[FakeRec("/after", 7, 0x1000_0000, Some(1), Some(0))],
+        ));
+        let dir = Scratch::new("empty_page");
+        let path = dir.gz_fixture("log", &raw, None);
+
+        let mut bus = Bus::new(16);
+        let recv = bus.add_rx();
+        parse_file(&path, &mut bus, &RecordFilter::default()).expect("an empty page is fine");
         drop(bus);
 
         let paths: Vec<_> = records(recv).iter().map(|r| r.path.clone()).collect();
-        assert_eq!(paths, vec!["/a", "/b"]);
+        assert_eq!(paths, ["/after"]);
     }
 
     #[test]
@@ -593,10 +669,8 @@ mod tests {
     fn test_uncompressed_input_is_rejected() {
         // fseventsd always gzips its logs; a raw page must fail clearly rather than parse as junk
         let page = encode_page(b"2SLD", &[FakeRec("/a", 1, 0x1000_0000, Some(10), None)]);
-        let dir = std::env::temp_dir().join(format!("fse_dump-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("uncompressed_v2");
-        std::fs::write(&path, page).unwrap();
+        let dir = Scratch::new("uncompressed_v2");
+        let path = dir.write("log", &page);
 
         let mut bus = Bus::new(16);
         let err = parse_file(&path, &mut bus, &RecordFilter::default())
@@ -613,7 +687,8 @@ mod tests {
             FakeRec("/v1/created", 0x10, 0x0100_8000, None, None),
             FakeRec("/v1/folder", 0x11, 0x0000_0001, None, None),
         ];
-        let path = write_fixture("v1", &encode_page(b"1SLD", &recs), None);
+        let dir = Scratch::new("v1");
+        let path = dir.gz_fixture("log", &encode_page(b"1SLD", &recs), None);
 
         let mut bus = Bus::new(16);
         let recv = bus.add_rx();
@@ -635,7 +710,8 @@ mod tests {
             FakeRec("/v2/a", 0x20, 0x1000_8000, Some(0xABCD), None),
             FakeRec("/v2/b", 0x21, 0x0200_0001, Some(0xEF01), None),
         ];
-        let path = write_fixture("v2", &encode_page(b"2SLD", &recs), None);
+        let dir = Scratch::new("v2");
+        let path = dir.gz_fixture("log", &encode_page(b"2SLD", &recs), None);
 
         let mut bus = Bus::new(16);
         let recv = bus.add_rx();
@@ -661,7 +737,8 @@ mod tests {
                 FakeRec("/p2/b", 3, 0x1000_0000, Some(3), Some(501)),
             ],
         ));
-        let path = write_fixture("v3_two_pages", &raw, None);
+        let dir = Scratch::new("v3_two_pages");
+        let path = dir.gz_fixture("log", &raw, None);
 
         let mut bus = Bus::new(16);
         let recv = bus.add_rx();
@@ -681,7 +758,8 @@ mod tests {
 
     #[test]
     fn test_unknown_version_is_an_error() {
-        let path = write_fixture("v9", &encode_page(b"9SLD", &[]), None);
+        let dir = Scratch::new("v9");
+        let path = dir.gz_fixture("log", &encode_page(b"9SLD", &[]), None);
         let mut bus = Bus::new(16);
         let err = parse_file(&path, &mut bus, &RecordFilter::default())
             .expect_err("unknown magic must fail");
@@ -703,7 +781,8 @@ mod tests {
             b"2SLD",
             &[FakeRec("/keep2", 3, 0x1000_0000, Some(3), None)],
         ));
-        let path = write_fixture("v2_filter_last", &raw, None);
+        let dir = Scratch::new("v2_filter_last");
+        let path = dir.gz_fixture("log", &raw, None);
 
         let filter = RecordFilter::new(&Some("keep".to_string()), &[], &[]).unwrap();
         let mut bus = Bus::new(16);
