@@ -11,7 +11,7 @@ use color_eyre::{Result, eyre::eyre};
 use jiff::{Span, Zoned};
 use std::path::Path;
 
-use crate::record::RecordFilter;
+use crate::{finish::Finish, record::RecordFilter};
 
 /// Utility to dump the fsevent files on OSX
 #[derive(Debug, Parser)]
@@ -259,16 +259,18 @@ impl CompressOpts {
     }
 
     #[cfg(feature = "zstd")]
-    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::AutoFinishEncoder<'a, W>
+    /// The encoder is finished explicitly (see [`Finish`]) rather than on drop, so a failure
+    /// writing the frame trailer is reported instead of lost
+    pub fn make_zstd<'a, W>(&self, w: W) -> zstd::stream::write::Encoder<'a, W>
     where
         W: Write,
     {
         let mut z = zstd::stream::write::Encoder::new(w, self.zlvl()).unwrap();
         z.multithread(self.zthreads as u32).unwrap();
-        z.auto_finish()
+        z
     }
 
-    pub fn make_stdout(&self) -> BufWriter<Box<dyn Write>> {
+    pub fn make_stdout(&self) -> BufWriter<Box<dyn Finish>> {
         let out = std::io::stdout().lock();
 
         #[cfg(feature = "zstd")]

@@ -14,7 +14,7 @@ use std::{
     collections::BTreeMap,
     convert::identity,
     fs::File,
-    io::{self, BufWriter, Write},
+    io::{self, BufWriter},
     path::Path,
     sync::Arc,
     thread,
@@ -28,9 +28,13 @@ use env_logger::{Target, WriteStyle};
 use log::LevelFilter;
 use opts::{Commands, Generate};
 
-use crate::record::{BusMsg, Record};
+use crate::{
+    finish::Finish,
+    record::{BusMsg, Record},
+};
 
 mod file_parser;
+mod finish;
 mod flags;
 mod opts;
 mod record;
@@ -51,29 +55,73 @@ fn main() -> Result<()> {
     }
 }
 
-/// Writes records to CSV format from a bus receiver
+/// The records a writer should handle
 ///
-/// Stops at the first write error, since nothing later can succeed either.
+/// A per-file writer stops at the end of the file it was started for; a shared writer runs
+/// until the bus is closed.
+fn records(recv: BusReader<BusMsg>, one_file: bool) -> impl Iterator<Item = Arc<Record>> {
+    recv.into_iter()
+        .take_while(move |msg| !(one_file && matches!(msg, BusMsg::EndOfFile)))
+        .filter_map(BusMsg::into_record)
+}
+
+/// Reports how a writer ended and closes its output
+///
+/// Writing stops at the first error, since nothing after it can succeed either. The sink is
+/// still closed so a compressed stream is left as well formed as the sink allows, but a second
+/// failure there is not counted again.
+fn end_output(what: &str, wrote: Result<()>, close: impl FnOnce() -> io::Result<()>) {
+    match wrote {
+        Ok(()) => {
+            if let Err(err) = close() {
+                fail!("Couldn't finish the {what} output: {err}");
+            }
+        }
+        Err(err) => {
+            fail!("Couldn't write {what}: {err}");
+            if let Err(err) = close() {
+                debug!("Couldn't finish the {what} output after a write failure: {err}");
+            }
+        }
+    }
+}
+
+/// Flushes a csv writer and finishes the sink underneath it
+fn close_csv<W: Finish>(writer: Writer<W>) -> io::Result<()> {
+    writer
+        .into_inner()
+        .map_err(|err| err.into_error())?
+        .finish()
+}
+
+/// Writes records to CSV format from a bus receiver
 ///
 /// # Arguments
 /// * `recv` - Bus reader receiving record updates
 /// * `writer` - CSV writer to output data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn csv_write<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, flush_all: bool)
-where
-    I: Write,
+/// * `one_file` - Whether to stop at the end of the current input file
+fn csv_write<W>(
+    recv: BusReader<BusMsg>,
+    mut writer: Writer<W>,
+    _: bool,
+    flush_all: bool,
+    one_file: bool,
+) where
+    W: Finish,
 {
-    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
-        if let Err(err) = writer.serialize(rec) {
-            fail!("Couldn't serialize csv: {err}");
-            return;
+    let wrote = (|| {
+        for rec in records(recv, one_file) {
+            writer.serialize(&rec)?;
+            if flush_all {
+                writer.flush()?;
+            }
         }
-        if flush_all && let Err(err) = writer.flush() {
-            fail!("Couldn't flush csv: {err}");
-            return;
-        }
-    }
+        Ok(())
+    })();
+
+    end_output("csv", wrote, || close_csv(writer));
 }
 
 /// Writes records to JSON format from a bus receiver
@@ -83,41 +131,32 @@ where
 /// * `writer` - Writer to output JSON data
 /// * `pretty` - Whether to use pretty formatting (multi-line)
 /// * `flush_all` - Whether to flush after each record
-fn json_write<I>(recv: BusReader<BusMsg>, mut writer: I, pretty: bool, flush_all: bool)
-where
-    I: Write,
+/// * `one_file` - Whether to stop at the end of the current input file
+fn json_write<W>(
+    recv: BusReader<BusMsg>,
+    mut writer: W,
+    pretty: bool,
+    flush_all: bool,
+    one_file: bool,
+) where
+    W: Finish,
 {
-    if pretty {
-        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
-            if let Err(err) = serde_json::to_writer_pretty(&mut writer, &rec) {
-                fail!("Couldn't serialize json: {err}");
-                return;
+    let wrote = (|| {
+        for rec in records(recv, one_file) {
+            if pretty {
+                serde_json::to_writer_pretty(&mut writer, &rec)?;
+            } else {
+                serde_json::to_writer(&mut writer, &rec)?;
             }
-            if let Err(err) = writeln!(writer) {
-                fail!("Couldn't append json newline: {err}");
-                return;
-            }
-            if flush_all && let Err(err) = writer.flush() {
-                fail!("Couldn't flush json: {err}");
-                return;
+            writeln!(writer)?;
+            if flush_all {
+                writer.flush()?;
             }
         }
-    } else {
-        for rec in recv.into_iter().filter_map(BusMsg::into_record) {
-            if let Err(err) = serde_json::to_writer(&mut writer, &rec) {
-                fail!("Couldn't serialize json: {err}");
-                return;
-            }
-            if let Err(err) = writeln!(writer) {
-                fail!("Couldn't append json newline: {err}");
-                return;
-            }
-            if flush_all && let Err(err) = writer.flush() {
-                fail!("Couldn't flush json: {err}");
-                return;
-            }
-        }
-    }
+        Ok(())
+    })();
+
+    end_output("json", wrote, || writer.finish());
 }
 
 /// Writes records to YAML format from a bus receiver
@@ -127,44 +166,40 @@ where
 /// * `writer` - Writer to output YAML data
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `flush_all` - Whether to flush after each record
-fn yaml_write<I>(recv: BusReader<BusMsg>, mut writer: I, _: bool, flush_all: bool)
+/// * `one_file` - Whether to stop at the end of the current input file
+fn yaml_write<W>(recv: BusReader<BusMsg>, mut writer: W, _: bool, flush_all: bool, one_file: bool)
 where
-    I: Write,
+    W: Finish,
 {
-    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
-        if let Err(err) = writeln!(writer, "---") {
-            fail!("Couldn't write yaml separator: {err}");
-            return;
+    let wrote = (|| {
+        for rec in records(recv, one_file) {
+            writeln!(writer, "---")?;
+            serde_yaml_ng::to_writer(&mut writer, &rec)?;
+            writeln!(writer)?;
+            if flush_all {
+                writer.flush()?;
+            }
         }
-        if let Err(err) = serde_yaml_ng::to_writer(&mut writer, &rec) {
-            fail!("Couldn't serialize yaml: {err}");
-            return;
-        }
-        if let Err(err) = writeln!(writer) {
-            fail!("Couldn't append yaml newline: {err}");
-            return;
-        }
-        if flush_all && let Err(err) = writer.flush() {
-            fail!("Couldn't flush yaml: {err}");
-            return;
-        }
-    }
+        Ok(())
+    })();
+
+    end_output("yaml", wrote, || writer.finish());
 }
 
-/// Aggregates records by path and writes unique path counts with combined flags
+/// Writes unique path records with aggregated counts and flags
 ///
 /// # Arguments
 /// * `recv` - Bus reader receiving record updates
 /// * `writer` - CSV writer for unique path output
 /// * `_` - Unused pretty print flag (kept for API consistency)
 /// * `include_timestamps` - Whether to include timestamps in CSV output
-fn write_uniqs<I>(recv: BusReader<BusMsg>, mut writer: Writer<I>, _: bool, include_timestamps: bool)
+fn write_uniqs<W>(recv: BusReader<BusMsg>, mut writer: Writer<W>, _: bool, include_timestamps: bool)
 where
-    I: Write,
+    W: Finish,
 {
     let mut u: BTreeMap<String, uniques::UniqueCounts> = BTreeMap::new();
 
-    for rec in recv.into_iter().filter_map(BusMsg::into_record) {
+    for rec in records(recv, false) {
         // Most paths repeat, so only pay for the key clone on the first sighting
         match u.get_mut(&rec.path) {
             Some(counts) => counts.update(rec.flag, rec.file_timestamp),
@@ -176,86 +211,47 @@ where
         }
     }
 
-    if include_timestamps {
-        // Use full serialization with timestamps
-        for (path, v) in u {
-            if let Err(err) = writer.serialize(v.into_unique_out(path)) {
-                fail!("Error writing the uniques: {err}");
+    let wrote = (|| {
+        if include_timestamps {
+            // Use full serialization with timestamps
+            for (path, v) in u {
+                writer.serialize(v.into_unique_out(path))?;
             }
-        }
-    } else {
-        // Manually write CSV without timestamps
-        // Write header
-        #[cfg(feature = "alt_flags")]
-        let header = vec!["path", "counts", "flags", "alt_flags"];
-        #[cfg(not(feature = "alt_flags"))]
-        let header = vec!["path", "counts", "flags"];
-
-        if let Err(err) = writer.write_record(&header) {
-            fail!("Error writing CSV header: {err}");
-            return;
-        }
-
-        // Write data rows
-        for (path, v) in u {
-            let out = v.into_unique_out_no_timestamps(path);
-            let counts_str = out.counts.to_string();
+        } else {
+            // Manually write CSV without timestamp fields
             #[cfg(feature = "alt_flags")]
-            let record = vec![
-                out.path.as_str(),
-                counts_str.as_str(),
-                out.flags,
-                out.alt_flags,
-            ];
+            let header = vec!["path", "counts", "flags", "alt_flags"];
             #[cfg(not(feature = "alt_flags"))]
-            let record = vec![out.path.as_str(), counts_str.as_str(), out.flags];
+            let header = vec!["path", "counts", "flags"];
 
-            if let Err(err) = writer.write_record(&record) {
-                fail!("Error writing unique record: {err}");
+            writer.write_record(&header)?;
+
+            for (path, v) in u {
+                let out = v.into_unique_out_no_timestamps(path);
+                let counts_str = out.counts.to_string();
+
+                #[cfg(feature = "alt_flags")]
+                let record = vec![
+                    out.path.as_str(),
+                    counts_str.as_str(),
+                    out.flags,
+                    out.alt_flags,
+                ];
+                #[cfg(not(feature = "alt_flags"))]
+                let record = vec![out.path.as_str(), counts_str.as_str(), out.flags];
+
+                writer.write_record(&record)?;
             }
         }
-    }
+        Ok(())
+    })();
+
+    end_output("uniques", wrote, || close_csv(writer));
 }
 
-/// Checks if the given path represents stdout (indicated by "-")
-///
-/// # Arguments
-/// * `p` - Path to check
-///
-/// # Returns
-/// `true` if the path is "-", `false` otherwise
+#[inline]
 fn path_stdout(p: &Path) -> bool {
     p.as_os_str() == "-"
-}
-
-#[inline]
-fn icsv(rec: Arc<Record>, writer: &mut Writer<BufWriter<File>>) {
-    if let Err(err) = writer.serialize(&rec) {
-        fail!("Error writing csv rec: {err}")
-    }
-}
-
-#[inline]
-fn ijson(rec: Arc<Record>, writer: &mut BufWriter<File>) {
-    if let Err(err) = serde_json::to_writer(&mut *writer, &rec) {
-        fail!("Error writing json rec: {err}")
-    }
-    if let Err(err) = writeln!(writer) {
-        fail!("Error writing json newline: {err}")
-    }
-}
-
-#[inline]
-fn iyaml(rec: Arc<Record>, writer: &mut BufWriter<File>) {
-    if let Err(err) = writeln!(writer, "---") {
-        fail!("Error writing yaml separator: {err}")
-    }
-    if let Err(err) = serde_yaml_ng::to_writer(&mut *writer, &rec) {
-        fail!("Error writing yaml rec: {err}")
-    }
-    if let Err(err) = writeln!(writer) {
-        fail!("Error writing yaml newline: {err}")
-    }
 }
 
 macro_rules! fdump {
@@ -265,7 +261,7 @@ macro_rules! fdump {
 
             if path_stdout(&p) {
                 $scope.spawn(move || {
-                    $proc_f(recv, $creater($c_opt.make_stdout()), false, false);
+                    $proc_f(recv, $creater($c_opt.make_stdout()), false, false, false);
                 });
             } else {
                 match File::create(&p) {
@@ -282,17 +278,24 @@ macro_rules! fdump {
                                     $creater($c_opt.make_gzip(BufWriter::new(f))),
                                     false,
                                     false,
+                                    false,
                                 );
                             } else if $c_opt.is_zstd(&p) {
                                 #[cfg(feature = "zstd")]
                                 {
-                                    $proc_f(recv, $creater($c_opt.make_zstd(f)), false, false);
+                                    $proc_f(
+                                        recv,
+                                        $creater($c_opt.make_zstd(f)),
+                                        false,
+                                        false,
+                                        false,
+                                    );
                                 }
 
                                 #[cfg(not(feature = "zstd"))]
                                 unreachable!("zstd feature not enabled");
                             } else {
-                                $proc_f(recv, $creater(BufWriter::new(f)), false, false);
+                                $proc_f(recv, $creater(BufWriter::new(f)), false, false, false);
                             };
                         });
                     }
@@ -303,7 +306,7 @@ macro_rules! fdump {
 }
 
 macro_rules! idump {
-    ( $want: ident, $bus: ident, $fscope: ident, $ftype: expr, $f: ident, $make_out: expr, $ifun: expr, ) => {
+    ( $want: ident, $bus: ident, $fscope: ident, $ftype: expr, $f: ident, $creater: expr, $proc_f: ident, ) => {
         if $want {
             let mut out_path = $f.clone();
             out_path.as_mut_os_string().push(format!(".{}", $ftype));
@@ -318,19 +321,12 @@ macro_rules! idump {
                     let recv = $bus.add_rx();
 
                     $fscope.spawn(move || {
-                        let out = &mut $make_out(BufWriter::new(w));
-
-                        // Stop as soon as the parser signals the end of this file
-                        for msg in recv {
-                            match msg {
-                                BusMsg::Record(r) => $ifun(r, out),
-                                BusMsg::EndOfFile => break,
-                            }
-                        }
+                        // Stops as soon as the parser signals the end of this file
+                        $proc_f(recv, $creater(BufWriter::new(w)), false, false, true);
                     });
                 }
-            };
-        };
+            }
+        }
     };
 }
 
@@ -463,11 +459,26 @@ fn dump(opts: opts::Dump) -> Result<()> {
                     "csv",
                     f,
                     Writer::from_writer,
-                    icsv,
+                    csv_write,
                 );
-
-                idump!(individual_jsons, bus, fscope, "json", f, identity, ijson,);
-                idump!(individual_yamls, bus, fscope, "yaml", f, identity, iyaml,);
+                idump!(
+                    individual_jsons,
+                    bus,
+                    fscope,
+                    "json",
+                    f,
+                    identity,
+                    json_write,
+                );
+                idump!(
+                    individual_yamls,
+                    bus,
+                    fscope,
+                    "yaml",
+                    f,
+                    identity,
+                    yaml_write,
+                );
 
                 match file_parser::parse_file(&f, &mut bus, &rec_filter) {
                     Ok(_) => info!("Finished parsing {}", f.display()),
@@ -590,10 +601,10 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
             match opts.format {
                 opts::WatchFormat::Csv => {
-                    csv_write(rec_recv, csv::Writer::from_writer(out), false, true)
+                    csv_write(rec_recv, csv::Writer::from_writer(out), false, true, false)
                 }
-                opts::WatchFormat::Json => json_write(rec_recv, out, opts.pretty, true),
-                opts::WatchFormat::Yaml => yaml_write(rec_recv, out, false, true),
+                opts::WatchFormat::Json => json_write(rec_recv, out, opts.pretty, true, false),
+                opts::WatchFormat::Yaml => yaml_write(rec_recv, out, false, true, false),
             }
         });
 
