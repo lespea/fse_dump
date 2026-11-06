@@ -2,7 +2,7 @@
 name = "fse_dump"
 description = "Dumps the fseventsd entries from a mac"
 
-version = "3.2.0"
+version = "3.2.1"
 edition = "2024"
 
 authors = ["Adam Lesperance <lespea@gmail.com>"]
@@ -31,28 +31,28 @@ zstd = ["dep:zstd"]
 [dependencies]
 bus = "2"
 byteorder = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { features = ["derive"], version = "4" }
 clap_complete = "4"
-color-eyre = { version = "0", default-features = false }
-crossbeam-channel = { version = "0", optional = true }
+color-eyre = { default-features = false, version = "0" }
+crossbeam-channel = { optional = true, version = "0" }
 csv = "1"
-ctrlc = { version = "3", features = ["termination"], optional = true }
+ctrlc = { features = ["termination"], optional = true, version = "3" }
 env_logger = "0"
-flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
+flate2 = { default-features = false, features = ["zlib-rs"], version = "1" }
 hashbrown = "0"
 jiff = "0"
-log = { version = "0", features = ["max_level_debug", "release_max_level_info"] }
-mimalloc = { version = "0", features = ["secure"] }
-notify = { version = "8", default-features = false, features = ["macos_kqueue"], optional = true }
-notify-debouncer-full = { version = "0", optional = true }
+log = { features = ["max_level_debug", "release_max_level_info"], version = "0" }
+mimalloc = { features = ["secure"], version = "0" }
+notify = { default-features = false, features = ["macos_kqueue"], optional = true, version = "8" }
+notify-debouncer-full = { optional = true, version = "0" }
 regex = "1"
-serde = { version = "1", features = ["rc"] }
-serde-hex = { version = "0", optional = true }
+serde = { features = ["rc"], version = "1" }
+serde-hex = { optional = true, version = "0" }
 serde_derive = "1"
 serde_json = "1"
 serde_yaml_ng = "0"
 walkdir = "2"
-zstd = { version = "0", features = ["zstdmt"], optional = true }
+zstd = { features = ["zstdmt"], optional = true, version = "0" }
 
 [profile.dev]
 opt-level = 1
