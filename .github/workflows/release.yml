@@ -66,13 +66,22 @@ jobs:
       - name: build
         run: cargo build --target ${{ matrix.target }} --verbose --release
 
-      - uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
-        name: Upload binaries to release
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref }}
-          file: target/${{ matrix.target }}/release/fse_dump${{ matrix.ext }}
-          asset_name: fse_dump-${{ github.ref_name }}${{ matrix.oname }}${{ matrix.ext }}
+      - name: Upload binaries to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          SRC: target/${{ matrix.target }}/release/fse_dump${{ matrix.ext }}
+          ASSET: fse_dump-${{ github.ref_name }}${{ matrix.oname }}${{ matrix.ext }}
+        run: |
+          # Normally the release already exists (created by hand with notes); create a bare one
+          # if not. Matrix jobs may race here, so a failed create is fine if another job won.
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --verify-tag --title "FSE_Dump $TAG" --generate-notes \
+            || gh release view "$TAG" >/dev/null
+          cp "$SRC" "$ASSET"
+          gh release upload "$TAG" "$ASSET" --clobber
 
   publish:
     name: Publish
