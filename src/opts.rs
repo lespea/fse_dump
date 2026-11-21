@@ -8,7 +8,7 @@ use std::{
 use clap::{Args, Parser, Subcommand, value_parser};
 use clap_complete::Shell;
 use color_eyre::{Result, eyre::eyre};
-use jiff::{Span, Zoned};
+use jiff::{Span, ZonedDateTime};
 use std::path::Path;
 
 use crate::{finish::Finish, record::RecordFilter};
@@ -349,12 +349,13 @@ impl Dump {
     fn cutoff_time(&self) -> Option<SystemTime> {
         if self.pull_days > 0 {
             Some(
-                Zoned::now()
+                ZonedDateTime::now()
                     .checked_sub(Span::new().days(self.pull_days))
                     .expect("invalid date offset")
                     .start_of_day()
                     .expect("invalid date offset")
-                    .into(),
+                    .try_into()
+                    .expect("cutoff time out of range"),
             )
         } else {
             None

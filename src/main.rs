@@ -513,7 +513,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
 
     use crossbeam_channel::select;
     use notify_debouncer_full::{
-        DebounceEventResult, FileIdMap, new_debouncer_opt, notify::RecursiveMode,
+        Config as DebounceConfig, DebounceEventResult, FileIdMap, new_debouncer_opt,
+        notify::{EventKindMask, RecursiveMode},
     };
 
     use crate::file_parser::parse_file;
@@ -544,7 +545,8 @@ fn watch(opts: opts::Watch) -> Result<()> {
         let _ = stop_send.try_send(());
     })?;
 
-    let debounce_time = Duration::from_secs(2);
+    // Only file creations matter, so skip access events (notify's default now includes them)
+    let debounce_config = DebounceConfig::default().with_timeout(Duration::from_secs(2));
 
     // Forwards newly created fsevents logs (and only those) to the parsing loop
     let on_events = move |result: DebounceEventResult| match result {
@@ -571,11 +573,13 @@ fn watch(opts: opts::Watch) -> Result<()> {
     // Keeps whichever watcher we built alive until the loop below is done
     let _watcher: Box<dyn std::any::Any> = if opts.poll {
         let mut debouncer = new_debouncer_opt::<_, notify::PollWatcher, FileIdMap>(
-            debounce_time,
-            None,
+            debounce_config.with_notify_config(
+                notify::Config::default()
+                    .with_event_kinds(EventKindMask::CORE)
+                    .with_poll_interval(Duration::from_secs(2)),
+            ),
             on_events,
             FileIdMap::new(),
-            notify::Config::default().with_poll_interval(Duration::from_secs(2)),
         )?;
 
         for path in opts.watch_dirs {
@@ -586,11 +590,9 @@ fn watch(opts: opts::Watch) -> Result<()> {
         Box::new(debouncer)
     } else {
         let mut debouncer = new_debouncer_opt::<_, notify::RecommendedWatcher, FileIdMap>(
-            debounce_time,
-            None,
+            debounce_config,
             on_events,
             FileIdMap::new(),
-            notify::Config::default(),
         )?;
 
         for path in opts.watch_dirs {

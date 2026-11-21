@@ -12,7 +12,6 @@ keywords = ["mac", "fseventsd", "security", "forensics"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 
-homepage = "https://github.com/lespea/fse_dump"
 repository = "https://github.com/lespea/fse_dump"
 
 [badges]
@@ -40,10 +39,10 @@ ctrlc = { features = ["termination"], optional = true, version = "3" }
 env_logger = "0"
 flate2 = { default-features = false, features = ["zlib-rs"], version = "1" }
 hashbrown = "0"
-jiff = "0"
+jiff = "1"
 log = { features = ["max_level_debug", "release_max_level_info"], version = "0" }
 mimalloc = { features = ["secure"], version = "0" }
-notify = { default-features = false, features = ["macos_kqueue"], optional = true, version = "8" }
+notify = { default-features = false, features = ["macos_kqueue"], optional = true, version = "9" }
 notify-debouncer-full = { optional = true, version = "0" }
 regex = "1"
 serde = { features = ["rc"], version = "1" }
