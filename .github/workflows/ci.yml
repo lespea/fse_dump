@@ -3,19 +3,34 @@ name: CI
 permissions:
   contents: read
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  # Weekly run so the nightly toolchain (non-blocking on push/PR) gets a run that actually fails
+  schedule:
+    - cron: "0 12 * * 1"
+
+# One run per branch/PR; superseded PR runs are cancelled, main runs always finish
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      # Stable, so a new nightly lint cannot fail CI for unrelated pushes
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      # Stable, so a new nightly lint cannot fail CI for unrelated pushes
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy --all-targets --all-features -- -D warnings
         name: clippy
       - run: cargo fmt --all -- --check
@@ -29,11 +44,14 @@ jobs:
       matrix:
         features: ["", "zstd", "watch", "hex", "alt_flags", "extra_id"]
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
           components: clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: features
       - run: cargo clippy --all-targets --no-default-features --features "${{ matrix.features }}" -- -D warnings
@@ -47,86 +65,63 @@ jobs:
     name: Test Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: release
       - run: cargo test --release --verbose
         name: test
 
-  test-stable:
-    name: Test Stable
+  test:
+    name: Test ${{ matrix.toolchain }} (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+    # Nightly breakage shouldn't turn pushes/PRs red; the weekly scheduled run still fails on it
+    continue-on-error: ${{ matrix.toolchain == 'nightly' && github.event_name != 'schedule' }}
     strategy:
       fail-fast: false
       matrix:
+        toolchain: [stable, nightly]
+        target:
+          - x86_64-pc-windows-msvc
+          - x86_64-unknown-linux-musl
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
         include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+          # Real Intel hardware rather than Rosetta on an arm64 runner
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+          - target: aarch64-apple-darwin
+            os: macos-latest
 
     steps:
       - name: install musl tools
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y musl musl-dev musl-tools
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
-          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.toolchain }}
+          targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          key: ${{ matrix.target }}
-
-      - run: cargo test --target ${{ matrix.target }} --verbose
-        name: test
-
-  test-nightly:
-    name: Test Nightly
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
-    steps:
-      - name: install musl tools
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl musl-dev musl-tools
-
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 1
-
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          target: ${{ matrix.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
+          key: ${{ matrix.toolchain }}-${{ matrix.target }}
 
       - run: cargo test --target ${{ matrix.target }} --verbose
         name: test

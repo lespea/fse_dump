@@ -1,11 +1,14 @@
 name: Release
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   push:
     tags: [v*]
+
+# No rust-cache in this workflow: caches are writable by ordinary pushes, so restoring one here
+# could leak into the shipped binaries and the crates.io publish
 
 jobs:
   build_and_release:
@@ -13,7 +16,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: release
 
+    permissions:
+      contents: write # upload release assets
+
     strategy:
+      # Don't let one failing target cancel the others mid-upload
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -24,7 +32,7 @@ jobs:
             target: x86_64-unknown-linux-musl
             ext: ""
             oname: "-linux"
-          - os: macos-latest
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             ext: ""
             oname: "-darwin"
@@ -35,24 +43,22 @@ jobs:
 
     steps:
       - name: install musl tools
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.target == 'x86_64-unknown-linux-musl' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y musl musl-dev musl-tools
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         name: checkout
         with:
           fetch-depth: 1
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         name: toolchain
         with:
-          target: ${{ matrix.target }}
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
+          toolchain: stable
+          targets: ${{ matrix.target }}
 
       - name: test
         run: cargo test --target ${{ matrix.target }} --verbose --release
@@ -60,7 +66,7 @@ jobs:
       - name: build
         run: cargo build --target ${{ matrix.target }} --verbose --release
 
-      - uses: svenstaro/upload-release-action@v2
+      - uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # 2.11.5
         name: Upload binaries to release
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -75,13 +81,17 @@ jobs:
     environment: release
 
     permissions:
+      contents: read
       id-token: write # Required for OIDC token exchange
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
       - run: cargo publish
         env:
